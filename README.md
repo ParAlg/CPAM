@@ -627,6 +627,63 @@ retrieved using the aug_val function:
 Please see the `map.h` and `augmented_map.h` files in `include/cpam`
 for more details on the full APIs.
 
+
+## Experiments <--> Figures and Tables in the Paper
+
+In this short section, we specify how the experiment workflow above is
+mapped to the figures and tables corresponding to experiments in the paper.
+
+* Figure 1 is obtained using the space usage data from three different
+experiments. The first is the space usage data from the interval tree
+application (/examples/interval/). The second is the space usage
+data from the range tree application (/examples/range_query/). The
+third is from the graph application (/examples/graphs/), specifically
+using the script `/examples/graphs/run_graph_stats/run_graph_stats.sh`.
+
+* Figure 2 is obtained by running microbenchmarks from the
+microbenchmark section (/examples/microbenchmarks/), using the binaries
+testParallel-PAM-NA and testParallel-CPAM-NA. The code for ParallelSTL
+is based on prior work on ParlayLib and is located in this Git
+repository: https://github.com/cmuparlay/bench-intel-pstl
+
+* Table 2 is obtained using the results from the microbenchmark
+experiments described above. These can be found in
+/examples/microbenchmarks/ by running the `run_microbenchmark.sh`
+script for the large input (the default).
+
+* Figure 8 (on the same page as Table 2) is obtained using the script
+`/examples/graphs/run_graph_stats/run_graph_stats.sh`. The larger
+graph inputs which are not built by default by the build_inputs.sh
+script can be obtained either from the references in the paper, or by
+contacting the authors.
+
+* Table 3 is obtained using three scripts. The first three rows are
+obtained using the `run_index.sh` script in /examples/index/. The
+next two rows are obtained using the `run_interval.sh` script in
+/examples/interval/. The last two rows are obtained using the
+`run_range.sh` script in /examples/range/.
+
+* Table 4 simply shows basic graph statistics about the input graphs.
+The data for the number of vertices and edges can be obtained by
+calling `head` on the adjacency graph format. The memory footprint for
+each format can be obtained using the script
+`/examples/graphs/run_graph_stats/run_graph_stats.sh`.
+
+* The data for Table 5 is obtained using the `run_static_algorithms.sh` script in
+/examples/graphs/run_static_algorithms.sh.
+
+* The data for Figure 9 can be obtained using the `run_blocksize_tuning.sh` script in /examples/microbenchmarks/blocksize_tuning/.
+
+* The data for Figure 10 can be obtained using the
+`run_blocksize_vs_space.sh` script in
+/examples/microbenchmarks/blocksize_vs_space.
+
+* The time series data for Figure 11 can be obtained using the script
+`run.sh` in /examples/graphs/run_simultaneous_updates_queries.
+
+
+
+
 ## References
 
 [1] Laxman Dhulipala, Guy Blelloch, Yan Gu, and Yihan Sun. PaC-trees: Supporting Parallel and Compressed Purely-Functional Collections. PLDI 2022.
