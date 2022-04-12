@@ -1,0 +1,54 @@
+include(danalysis)
+
+# List all files that should be considered for static analysis
+configure_danalysis(
+  INCLUDES
+    ${PARLAY_INCLUDE_DIR}
+    ${PARLAY_INCLUDE_DIR}/parlay
+  FILES
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/block_delayed.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/collect_reduce.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/file_map.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/group_by.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/sequence_base.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/stream_delayed.h
+    ${PARLAY_INCLUDE_DIR}/parlay/internal/work_stealing_job.h
+    ${PARLAY_INCLUDE_DIR}/parlay/alloc.h
+    ${PARLAY_INCLUDE_DIR}/parlay/delayed_sequence.h
+    ${PARLAY_INCLUDE_DIR}/parlay/hash_table.h
+    ${PARLAY_INCLUDE_DIR}/parlay/io.h
+    ${PARLAY_INCLUDE_DIR}/parlay/monoid.h
+    ${PARLAY_INCLUDE_DIR}/parlay/parallel.h
+    ${PARLAY_INCLUDE_DIR}/parlay/primitives.h
+    ${PARLAY_INCLUDE_DIR}/parlay/random.h
+    ${PARLAY_INCLUDE_DIR}/parlay/range.h
+    ${PARLAY_INCLUDE_DIR}/parlay/sequence.h
+    ${PARLAY_INCLUDE_DIR}/parlay/scheduler.h
+    ${PARLAY_INCLUDE_DIR}/parlay/slice.h
+    ${PARLAY_INCLUDE_DIR}/parlay/type_traits.h
+    ${PARLAY_INCLUDE_DIR}/parlay/utilities.h
+  IGNORE_DEFINITIONS
+    PARLAY_CILK
+    BSD
+    __APPLE__
+    __MACH__
+    __unix__
+    __unix
+    unix
+    _WIN32
+    __WIN32__
+    WIN32
+    __CYGWIN__
+    __CYGWIN32__
+    HW_MEMSIZE
+    HW_PHYSMEM64
+    HW_MEMSIZE
+    HW_REALMEM
+    HW_PHYSMEM
+    HW_PYSMEM
+    CTL_HW
+    _SC_AIX_REALMEM
+    _SC_PHYS_PAGES
+    _SC_PAGESIZE
+    _SC_PAGE_SIZE
+)

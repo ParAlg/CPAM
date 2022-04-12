@@ -1,0 +1,12 @@
+Num_threads = 144
+Num_deques = 144
+threads = 144
+400000
+Reserving.... 400000 nodes with size = 40
+RESULT: n = 100000, size in bytes = 2840716
+RESULT	test=test_size	time=1.000000	n=100000	m=100000	iteration=0	p=144
+400000
+Reserving.... 400000 nodes with size = 40
+RESULT: n = 100000, size in bytes = 2840716
+RESULT	test=test_size	time=1.000000	n=100000	m=100000	iteration=1	p=144
+Average time: 1.000000

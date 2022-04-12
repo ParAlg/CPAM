@@ -1,0 +1,35 @@
+INCLUDE_DIRS = -I$(ROOTDIR)examples/graphs/other_systems/gbbs/ -I$(ROOTDIR)examples/graphs/other_systems/gbbs/external/parlaylib/include/
+
+.DEFAULT_GOAL := all
+
+all: $(ALL)
+
+LIGRA_OBJS = $(wildcard $(ROOTDIR)examples/graphs/other_systems/gbbs/bin/gbbs/*.a)
+LIGRA_ENCODING_OBJS = $(wildcard $(ROOTDIR)examples/graphs/other_systems/gbbs/bin/gbbs/encodings/*.a)
+
+ALL_OBJS = $(LIGRA_OBJS) $(LIGRA_ENCODING_OBJS) $(OTHER_OBJS)
+
+LIGRA_OBJS_CLEAN = $(wildcard $(ROOTDIR)examples/graphs/other_systems/gbbs/bin/gbbs/*.o)
+LIGRA_ENCODING_OBJS_CLEAN = $(wildcard $(ROOTDIR)examples/graphs/other_systems/gbbs/bin/gbbs/encodings/*.o)
+
+ALL_OBJS_CLEAN = $(LIGRA_OBJS_CLEAN) $(LIGRA_ENCODING_OBJS_CLEAN) $(OTHER_OBJS_CLEAN)
+
+#comma = ,
+#ALL_OBJS_SUBST = $(subst |, ,$(addprefix -Wl$(comma)--start-lib|, $(addsuffix |-Wl$(comma)--end-lib, $(ALL_OBJS))))
+
+other : $(OTHER)
+
+gbbs :
+	make -C $(ROOTDIR)examples/graphs/other_systems/gbbs/gbbs/
+
+gbbs_encodings :
+	make -C $(ROOTDIR)examples/graphs/other_systems/gbbs/gbbs/encodings/
+
+% : %.cc gbbs gbbs_encodings other
+	$(CC) $(INCLUDE_DIRS) $(OTHERFLAGS) $(CFLAGS) $(PFLAGS) -o $@ $< $(LINKER_START_GROUP) $(ALL_OBJS) $(LINKER_END_GROUP) -pthread $(LFLAGS)
+#-Wl,--whole-archive -lpthread -Wl,--no-whole-archive -Wl,-S -Wl,-no-as-needed -Wl,-z,relro,-z,now -lstdc++ -fuse-ld=gold
+
+.PHONY : clean
+
+clean :
+	rm -f *.o $(ALL) $(ALL_OBJS) $(ALL_OBJS_CLEAN)
