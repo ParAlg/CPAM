@@ -26,7 +26,7 @@ for fname in files:
   query_seq = float(items4[6][7:])
   query_spd = query_seq/query_par
 
-  size_in_gib = float(items1[7][15:])
+  size_in_gib = float(items1[7].split("=")[-1])
 
   fout = open(data[fname],'w')
   fout.write("Space (GiB) = " + str(size_in_gib) + "\n")

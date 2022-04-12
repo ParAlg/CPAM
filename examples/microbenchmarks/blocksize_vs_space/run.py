@@ -19,7 +19,7 @@ def no_numa():
   cmd = "numactl --show"
   output = ""
   try:
-    output = str(subprocess.check_output(cmd, shell=True)
+    output = str(subprocess.check_output(cmd, shell=True))
   except subprocess.CalledProcessError as e:
     output = str(e.output)
   # kind of brittle...

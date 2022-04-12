@@ -35,7 +35,7 @@ for fname in files:
   query_all_seq = float(items8[7][7:])
   query_all_spd = query_all_seq/query_all_par
 
-  size_in_gib = float(items1[8][15:])
+  size_in_gib = float(items1[8].split("=")[-1])
 
   fout = open(data[fname],'w')
   fout.write(items1[2]+', '+items1[3]+', ')

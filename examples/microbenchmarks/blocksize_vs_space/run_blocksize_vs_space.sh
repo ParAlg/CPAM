@@ -16,7 +16,7 @@ fi
 printf "${GREEN}Running Microbenchmarks${NC}\n"
 printf "(Results in Figure 10)\n"
 cd ../
-make -j
+make -j $THREADS
 cd blocksize_vs_space
 
 python3 run.py $small_flag
