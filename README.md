@@ -22,9 +22,7 @@ scenarios (e.g., different sizes, different datasets, different
 numbers of cores, and other operations described in the paper,
 but not reported in the experiments).
 
-More details, examples, and discussion can be found in our paper [1],
-and will also be included in the full publicly-released version of the
-code on Github.
+More details, examples, and discussion can be found in our paper [1].
 
 
 ## Requirements
