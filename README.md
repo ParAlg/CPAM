@@ -631,4 +631,6 @@ for more details on the full APIs.
 
 ## References
 
-[1] PaC-trees: Supporting Parallel and Compressed Purely-Functional Collections
+[1] Laxman Dhulipala, Guy Blelloch, Yan Gu, and Yihan Sun. PaC-trees: Supporting Parallel and Compressed Purely-Functional Collections
+[2] Yihan Sun, Daniel Ferizovic, and Guy E. Blelloch. PAM: Parallel Augmented Maps. PPoPP 2018.
+
