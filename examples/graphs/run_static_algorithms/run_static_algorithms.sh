@@ -5,9 +5,13 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+export THREADS=`nproc --all`
+
 cd ../other_systems/aspen/
 make run_static_algorithm
-cd ../../run_static_algorithms
+cd ../../algorithms
+make -j $THREADS
+cd ../run_static_algorithms
 
 printf "${BLUE}Running CPAM algorithms.${NC}\n"
 python3 run_cpam.py
