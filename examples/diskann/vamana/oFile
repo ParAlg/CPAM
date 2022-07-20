@@ -1,0 +1,80 @@
+Num_threads = 144
+Num_deques = 144
+Size of dataset: 1000000
+Building with points 999999 through 0
+Medoid ID: 89028
+ANN: Found nearest neighbors: 3.2919
+Average graph out-degree = 8.521
+Max out-degree: 10, Min out-degree: 0
+Max nodes searched = 458, Average nodes searched = 260.8
+ANN: stats: 0.0032
+Parlay time: 3.2951
+Num_threads = 144
+Num_deques = 144
+Recall 1@1: 0.7951
+Recall 2@2: 0.7865
+Recall 10@10: 0.75689
+Recall 50@50: 0.709174
+Recall 100@100: 0.676762
+Recall 200@200: 0.632988
+1 : -R 10 -L 15 -Q 250 -k 200 -q /ssd1/ANN/sift/bigann_query.bvecs -r 1 -o /tmp/ofile274317_481950 : '3.295'
+Num_threads = 144
+Num_deques = 144
+Size of dataset: 1000000
+Building with points 999999 through 0
+Medoid ID: 89028
+ANN: Found nearest neighbors: 10.0949
+Average graph out-degree = 21.54
+Max out-degree: 25, Min out-degree: 0
+Max nodes searched = 352, Average nodes searched = 255.2
+ANN: stats: 0.0047
+Parlay time: 10.0996
+Num_threads = 144
+Num_deques = 144
+Recall 1@1: 0.9883
+Recall 2@2: 0.9855
+Recall 10@10: 0.97824
+Recall 50@50: 0.961426
+Recall 100@100: 0.947163
+Recall 200@200: 0.924285
+1 : -R 25 -L 35 -Q 250 -k 200 -q /ssd1/ANN/sift/bigann_query.bvecs -r 1 -o /tmp/ofile239492_960702 : '10.099'
+Num_threads = 144
+Num_deques = 144
+Size of dataset: 1000000
+Building with points 999999 through 0
+Medoid ID: 89028
+ANN: Found nearest neighbors: 28.7047
+Average graph out-degree = 40.26
+Max out-degree: 50, Min out-degree: 0
+Max nodes searched = 275, Average nodes searched = 253.7
+ANN: stats: 0.0079
+Parlay time: 28.7126
+Num_threads = 144
+Num_deques = 144
+Recall 1@1: 0.9981
+Recall 2@2: 0.99725
+Recall 10@10: 0.99651
+Recall 50@50: 0.992242
+Recall 100@100: 0.988337
+Recall 200@200: 0.980941
+1 : -R 50 -L 75 -Q 250 -k 200 -q /ssd1/ANN/sift/bigann_query.bvecs -r 1 -o /tmp/ofile891279_956893 : '28.712'
+Num_threads = 144
+Num_deques = 144
+Size of dataset: 1000000
+Building with points 999999 through 0
+Medoid ID: 89028
+ANN: Found nearest neighbors: 44.2312
+Average graph out-degree = 64.12
+Max out-degree: 100, Min out-degree: 0
+Max nodes searched = 261, Average nodes searched = 252.9
+ANN: stats: 0.0140
+Parlay time: 44.2452
+Num_threads = 144
+Num_deques = 144
+Recall 1@1: 0.9994
+Recall 2@2: 0.9992
+Recall 10@10: 0.9986
+Recall 50@50: 0.997028
+Recall 100@100: 0.99563
+Recall 200@200: 0.992801
+1 : -R 100 -L 125 -Q 250 -k 200 -q /ssd1/ANN/sift/bigann_query.bvecs -r 1 -o /tmp/ofile566090_720528 : '44.245'
