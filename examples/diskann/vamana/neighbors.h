@@ -25,10 +25,10 @@
 #include "parlay/primitives.h"
 #include "parlay/random.h"
 //#include "common/geometry.h"
-#include "../utils/NSGDist.h"  
+#include "../utils/NSGDist.h"
 #include "../utils/types.h"
 #include "index.h"
-#include "../utils/beamSearch.h"  
+#include "../utils/beamSearch.h"
 #include "../utils/indexTools.h"
 #include "../utils/stats.h"
 
@@ -37,20 +37,20 @@ extern bool report_stats;
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> &v, int k, int maxDeg, int beamSize, int beamSizeQ, double alpha, double dummy,
   parlay::sequence<Tvec_point<T>*> &q) {
-  parlay::internal::timer t("ANN",report_stats); 
+  parlay::internal::timer t("ANN",report_stats);
   {
     unsigned d = (v[0]->coordinates).size();
-    std::cout << "Size of dataset: " << v.size() << std::endl; 
+    std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(maxDeg, beamSize, alpha, d);
 
-    
-    int parts = 10; 
+
+    int parts = 10;
     size_t n = v.size();
     size_t m = (size_t) (n/parts);
-    size_t r = m/2; 
+    size_t r = m/2;
     parlay::sequence<int> inserts = parlay::tabulate(n, [&] (size_t i){return static_cast<int>(i);});
-    std::cout << "Building with points " << inserts[inserts.size()-1] << " through " << inserts[0] << std::endl; 
+    std::cout << "Building with points " << inserts[inserts.size()-1] << " through " << inserts[0] << std::endl;
     I.build_index(v, inserts);
 
     I.searchNeighbors(q, v, beamSizeQ, k);
@@ -67,27 +67,17 @@ void ANN(parlay::sequence<Tvec_point<T>*> &v, int k, int maxDeg, int beamSize, i
 
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy) {
-  parlay::internal::timer t("ANN",report_stats); 
-  { 
+  parlay::internal::timer t("ANN",report_stats);
+  {
     unsigned d = (v[0]->coordinates).size();
-    std::cout << "Size of dataset: " << v.size() << std::endl; 
+    std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(maxDeg, beamSize, alpha, d);
     I.build_index(v, parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
-    t.next("Built index");  
+    t.next("Built index");
     if(report_stats){
       graph_stats(v);
       t.next("stats");
     }
   };
 }
-
-
-    // int parts = 10;
-    // size_t m = (size_t) (v.size()/parts);
-    // for(int i=0; i<parts; i++){
-    //   parlay::sequence<int> delete_list = parlay::tabulate(m, [&] (size_t j){return static_cast<int>(parts*i+j);});
-    //   I.lazy_delete(delete_list, v);
-    //   I.consolidate_deletes(v);
-    //   I.batch_insert(delete_list, v, true);
-    // }
