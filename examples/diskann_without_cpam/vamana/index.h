@@ -169,7 +169,7 @@ struct knn_index{
     return robustPrune(p, std::move(cc), v, alpha, add);
 	}
 
-	void build_index(parlay::sequence<Tvec_point<T>*> &v, parlay::sequence<int> inserts){
+	void build_index(parlay::sequence<Tvec_point<T>*> &v, parlay::sequence<int> inserts) {
 		clear(v);
 		//find the medoid, which each beamSearch will begin from
 		find_approx_medoid(v);
