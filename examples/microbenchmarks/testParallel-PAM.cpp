@@ -97,7 +97,7 @@ std::mt19937_64& get_rand_gen() {
 parlay::sequence<par> uniform_input(size_t n, size_t window,
                                   bool shuffle = false) {
   auto g = [&](size_t i) {
-    uniform_int_distribution<> r_keys(1, window);
+    uniform_int_distribution<size_t> r_keys(1, window);
     key_type key = r_keys(get_rand_gen());
     key_type val = i;
     return make_pair(key, val);
@@ -113,7 +113,7 @@ parlay::sequence<par> uniform_input(size_t n, size_t window,
 
 parlay::sequence<par> uniform_input_unsorted(size_t n, size_t window) {
   auto f = [&](size_t i) {
-    uniform_int_distribution<> r_keys(1, window);
+    uniform_int_distribution<size_t> r_keys(1, window);
     key_type k = r_keys(get_rand_gen());
     key_type c = r_keys(get_rand_gen());
     return make_pair(k, c);
