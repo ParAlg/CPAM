@@ -7,41 +7,9 @@
 #include <pam/parse_command_line.h>
 
 #include "types.h"
+#include "ann_graph.h"
 #include "util/NSGDist.h"
 #include "util/distance.h"
-
-// Want to store a *directed* graph (without in-edges) using CPAM
-// format. No augmentation needed.
-// Vertices stored in a CPAM map, with modest block size. Each vertex
-// object just points to its incident edges.
-
-// Graph stores adjacency information (neighbors).
-
-template <typename T>
-struct ann_node_data {
-  parlay::sequence<uint32_t> neighbor_ids;
-  using tvec_point = Tvec_point<T>;
-
-  tvec_point* our_point;
-
-  // Other methods on a node? Do we store distances?
-};
-
-template <typename T>
-struct ann_node_entry {
-  using key_t = uint32_t;  // integer id
-  using val_t = ann_node_data<T>;
-  static inline bool comp(key_t a, key_t b) { return a < b; }
-  using entry_t = std::tuple<key_t, val_t>;
-};
-
-template <typename T>
-struct ann_graph {
-  using ann_node_tree = cpam::pam_map<ann_node_entry<T>>;
-  // Useful definitions
-  using ann_node = typename ann_node_tree::node;
-  using ann_node_gc = typename ann_node_tree::GC;
-};
 
 template <typename T>
 struct knn_index {
@@ -50,6 +18,8 @@ struct knn_index {
   // TODO(laxmand, magdalen): rename?
   double r2_alpha;  // alpha parameter for round 2 of robustPrune
   size_t d;
+
+  ann_graph<T> G;
 
   using tvec_point = Tvec_point<T>;
   using fvec_point = Tvec_point<float>;
@@ -69,63 +39,70 @@ struct knn_index {
                    parlay::sequence<int> inserts) {
     // find the medoid, which each beamSearch will begin from
     find_approx_medoid(v);
-    batch_insert(inserts, v, 2, .02, false);
-    // build_index_inner(v, r2_alpha, 2, .02);
+    auto x = G.get_node(33);
+    std::cout << "here: " << x.has_value() << std::endl;
+    // batch_insert(inserts, v, 2, .02, false);
   }
 
  private:
 
-  template <typename T>
-  std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
-      Tvec_point<T>* p, parlay::sequence<Tvec_point<T>*>& v,
-      Tvec_point<T>* medoid, int beamSize, unsigned d) {
-    // initialize data structures
-    std::vector<pid> visited;
-    parlay::sequence<pid> frontier;
-    auto less = [&](pid a, pid b) {
-        return a.second < b.second || (a.second == b.second && a.first < b.first); };
-    auto make_pid = [&] (int q) {
-      return std::pair{q, distance(v[q]->coordinates.begin(), p->coordinates.begin(), d)};};
-    int bits = std::ceil(std::log2(beamSize*beamSize));
-    parlay::sequence<int> hash_table(1 << bits, -1);
-
-    // the frontier starts with the medoid
-    frontier.push_back(make_pid(medoid->id));
-
-    std::vector<pid> unvisited_frontier(beamSize);
-    parlay::sequence<pid> new_frontier(2*beamSize);
-    unvisited_frontier[0] = frontier[0];
-    bool not_done = true;
-
-    // terminate beam search when the entire frontier has been visited
-    while (not_done) {
-      // the next node to visit is the unvisited frontier node that is closest to p
-      pid currentPid = unvisited_frontier[0];
-      Tvec_point<T>* current = v[currentPid.first];
-      auto g = [&] (int a) {
-  	       int loc = parlay::hash64_2(a) & ((1 << bits) - 1);
-  	       if (hash_table[loc] == a) return false;
-  	       hash_table[loc] = a;
-  	       return true;};
-
-      // TODO: Neighborhood access:
-      auto candidates = parlay::filter(current->out_nbh.cut(0,size_of(current->out_nbh)), g);
-
-      auto pairCandidates = parlay::map(candidates, [&] (long c) {return make_pid(c);});
-      auto sortedCandidates = parlay::unique(parlay::sort(pairCandidates, less));
-      auto f_iter = std::set_union(frontier.begin(), frontier.end(),
-  				 sortedCandidates.begin(), sortedCandidates.end(),
-  				 new_frontier.begin(), less);
-      size_t f_size = std::min<size_t>(beamSize, f_iter - new_frontier.begin());
-      frontier = parlay::tabulate(f_size, [&] (long i) {return new_frontier[i];});
-      visited.insert(std::upper_bound(visited.begin(), visited.end(), currentPid, less), currentPid);
-      auto uf_iter = std::set_difference(frontier.begin(), frontier.end(),
-  				 visited.begin(), visited.end(),
-  				 unvisited_frontier.begin(), less);
-      not_done = uf_iter > unvisited_frontier.begin();
-    }
-    return std::make_pair(frontier, parlay::to_sequence(visited));
-  }
+//  // p: query vector
+//  // v: database of vectors
+//  // medoid: "root" of the proximity graph
+//  // beamSize: (similar to ef)
+//  // d: dimensionality of the indexed vectors
+//  std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
+//      Tvec_point<T>* p, Tvec_point<T>* medoid, int beamSize, unsigned d) {
+//    // initialize data structures
+//    std::vector<pid> visited;
+//    parlay::sequence<pid> frontier;
+//    auto less = [&](pid a, pid b) {
+//        return a.second < b.second || (a.second == b.second && a.first < b.first); };
+//    auto make_pid = [&] (int q) {
+//      // Search for q in G.
+////      auto v_q = G.get_vertex(q);
+////      assert(
+//      return std::pair{q, distance(v[q]->coordinates.begin(), p->coordinates.begin(), d)};};
+//    int bits = std::ceil(std::log2(beamSize*beamSize));
+//    parlay::sequence<int> hash_table(1 << bits, -1);
+//
+//    // the frontier starts with the medoid
+//    frontier.push_back(make_pid(medoid->id));
+//
+//    std::vector<pid> unvisited_frontier(beamSize);
+//    parlay::sequence<pid> new_frontier(2*beamSize);
+//    unvisited_frontier[0] = frontier[0];
+//    bool not_done = true;
+//
+//    // terminate beam search when the entire frontier has been visited
+//    while (not_done) {
+//      // the next node to visit is the unvisited frontier node that is closest to p
+//      pid currentPid = unvisited_frontier[0];
+//      Tvec_point<T>* current = v[currentPid.first];
+//      auto g = [&] (int a) {
+//  	       int loc = parlay::hash64_2(a) & ((1 << bits) - 1);
+//  	       if (hash_table[loc] == a) return false;
+//  	       hash_table[loc] = a;
+//  	       return true;};
+//
+//      // TODO: Neighborhood access:
+//      auto candidates = parlay::filter(current->out_nbh.cut(0,size_of(current->out_nbh)), g);
+//
+//      auto pairCandidates = parlay::map(candidates, [&] (long c) {return make_pid(c);});
+//      auto sortedCandidates = parlay::unique(parlay::sort(pairCandidates, less));
+//      auto f_iter = std::set_union(frontier.begin(), frontier.end(),
+//  				 sortedCandidates.begin(), sortedCandidates.end(),
+//  				 new_frontier.begin(), less);
+//      size_t f_size = std::min<size_t>(beamSize, f_iter - new_frontier.begin());
+//      frontier = parlay::tabulate(f_size, [&] (long i) {return new_frontier[i];});
+//      visited.insert(std::upper_bound(visited.begin(), visited.end(), currentPid, less), currentPid);
+//      auto uf_iter = std::set_difference(frontier.begin(), frontier.end(),
+//  				 visited.begin(), visited.end(),
+//  				 unvisited_frontier.begin(), less);
+//      not_done = uf_iter > unvisited_frontier.begin();
+//    }
+//    return std::make_pair(frontier, parlay::to_sequence(visited));
+//  }
 
 
   void batch_insert(parlay::sequence<int>& inserts,

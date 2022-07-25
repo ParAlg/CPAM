@@ -4,6 +4,8 @@
 #include "parlay/parallel.h"
 #include "parlay/primitives.h"
 
+using node_id = uint32_t;
+
 // for a file in .fvecs or .bvecs format, but extendible to other types
 template <typename T>
 struct Tvec_point {
