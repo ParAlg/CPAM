@@ -69,8 +69,6 @@ auto parse_fvecs(const char* filename, int maxDeg) {
     float* end = start + d;
     points[i].id = i;
     points[i].coordinates = parlay::make_slice(start, end);
-    points[i].out_nbh = parlay::make_slice(out_nbh.begin()+maxDeg*i, out_nbh.begin()+maxDeg*(i+1));
-    // points[i].new_nbh = parlay::make_slice(out_nbh.begin()+maxDeg*i, out_nbh.begin()+maxDeg*(i+1));
   });
 
   return points;
@@ -128,7 +126,6 @@ auto parse_bvecs(const char* filename, int maxDeg) {
     uint8_t* end = start + d;
     points[i].id = i;
     points[i].coordinates = parlay::make_slice(start, end);
-    points[i].out_nbh = parlay::make_slice(out_nbh.begin()+maxDeg*i, out_nbh.begin()+maxDeg*(i+1));
   });
 
   return points;

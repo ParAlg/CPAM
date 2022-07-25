@@ -8,15 +8,9 @@
 template <typename T>
 struct Tvec_point {
   int id;
-  int cnt;
   parlay::slice<T*, T*> coordinates;
-  parlay::slice<int*, int*> out_nbh;
-  parlay::slice<int*, int*> new_nbh;
   Tvec_point()
-      : coordinates(parlay::make_slice<T*, T*>(nullptr, nullptr)),
-        out_nbh(parlay::make_slice<int*, int*>(nullptr, nullptr)),
-        new_nbh(parlay::make_slice<int*, int*>(nullptr, nullptr)) {}
-  parlay::sequence<int> ngh = parlay::sequence<int>();
+      : coordinates(parlay::make_slice<T*, T*>(nullptr, nullptr)) {}
 };
 
 // for an ivec file, which contains the ground truth
