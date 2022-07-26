@@ -66,8 +66,8 @@ public:
   }
 
   // destruct.
-  ~map_() { 
-    clear(); 
+  ~map_() {
+    clear();
   }
 
   // singleton (TODO: finalize?)
@@ -225,7 +225,8 @@ public:
   // insertion, updates, and deletion
   template <class Func>
   static M insert(M m, const E& p, const Func& f) {
-    return M(Tree::insert(m.get_root(), p, f)); }
+    return M(Tree::insert(m.get_root(), p, f));
+  }
 
   template <class Func>
   void insert(const E& p, const Func& f) {

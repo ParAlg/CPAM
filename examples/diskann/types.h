@@ -11,8 +11,7 @@ template <typename T>
 struct Tvec_point {
   int id;
   parlay::slice<T*, T*> coordinates;
-  Tvec_point()
-      : coordinates(parlay::make_slice<T*, T*>(nullptr, nullptr)) {}
+  Tvec_point() : coordinates(parlay::make_slice<T*, T*>(nullptr, nullptr)) {}
 };
 
 // for an ivec file, which contains the ground truth
