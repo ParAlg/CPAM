@@ -327,7 +327,10 @@ struct knn_index {
         auto node = ann_node(v[index].coordinates.begin(), nghs_size, nghs_alloc);
         return std::make_tuple(index, node);
       });
+      // Working in-place for now (one-line fix to make functional).
+      G.batch_insert_inplace(std::move(kv_pairs));
 
+      // TODO: update the code below:
 //      auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
 //      // finally, add the bidirectional edges; if they do not make
 //      // the vertex exceed the degree bound, just add them to out_nbhs;
@@ -335,7 +338,7 @@ struct knn_index {
 //      // std::cout << "here4" << std::endl;
 //      parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
 //        auto[index, candidates] = grouped_by[j];
-//        int newsize = candidates.size() + size_of(v[index]->out_nbh);
+//        int newsize = candidates.size() + G.get_node(index)->out_degree();
 //        if (newsize <= maxDeg) {
 //          for (const int& k : candidates) add_nbh(k, v[index]);
 //        } else {
