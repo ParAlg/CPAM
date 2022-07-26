@@ -15,11 +15,12 @@ template <typename T>
 struct knn_index {
   size_t maxDeg;
   size_t beamSize;
-  // TODO(laxmand, magdalen): rename?
+  // TODO: rename? are we using round 2?
   double r2_alpha;  // alpha parameter for round 2 of robustPrune
   size_t d;
 
   using ANNGraph = ann_graph<T>;
+  using ann_node = typename ANNGraph::ann_node;
   ANNGraph G;
 
   using tvec_point = Tvec_point<T>;
@@ -41,7 +42,7 @@ struct knn_index {
                    parlay::sequence<int> inserts) {
     // Find the medoid, which each beamSearch will begin from.
     node_id medoid_id = find_approx_medoid(v);
-    auto node_data = ann_node_data<T>(medoid->coordinates.begin(), 0, nullptr);
+    auto node_data = ann_node(medoid->coordinates.begin(), 0, nullptr);
     G.insert_node_inplace(medoid_id, node_data);
     auto x = G.get_node(medoid_id);
     std::cout << "here: " << x.has_value() << std::endl;
@@ -198,11 +199,30 @@ struct knn_index {
   }
 
   //special size function
-  static int size_of(parlay::slice<T*, T*> nbh) const {
+  static int size_of(parlay::slice<T*, T*> nbh) {
   	int size = 0;
   	int i=0;
   	while(nbh[i] != -1 && i<nbh.size()) {size++; i++;}
   	return size;
+  }
+
+  static void synchronize(Tvec_point<T> *p){
+  	std::vector<int> container = std::vector<int>();
+  	for(int j=0; j<p->new_nbh.size(); j++) {
+  		container.push_back(p->new_nbh[j]);
+  	}
+  	for(int j=0; j<p->new_nbh.size(); j++){
+  		p->out_nbh[j] = container[j];
+  	}
+  	p->new_nbh = parlay::make_slice<int*, int*>(nullptr, nullptr);
+  }
+
+  //synchronization function
+  static void synchronize(parlay::sequence<Tvec_point<T>*> &v){
+  	size_t n = v.size();
+  	parlay::parallel_for(0, n, [&] (size_t i){
+  		synchronize(v[i]);
+  	});
   }
 
   void batch_insert(parlay::sequence<int>& inserts,
@@ -272,37 +292,60 @@ struct knn_index {
       // Not yet added to the graph G.
 
       // make each edge bidirectional by first adding each new edge
-      //(i,j) to a sequence, then semisorting the sequence by key values
+      // (i,j) to a sequence, then semisorting the sequence by key values
       // std::cout << "here3" << std::endl;
       auto to_flatten = parlay::tabulate(ceiling - floor, [&](size_t i) {
         int index = shuffled_inserts[i + floor];
+
+        auto new_nghs =
+            parlay::make_slice(new_out.begin() + maxDeg * i,
+                               new_out.begin() + maxDeg * (i + 1));
+
         auto edges =
-            parlay::tabulate(size_of(v[index]->new_nbh), [&](size_t j) {
-              return std::make_pair((v[index]->new_nbh)[j], index);
+            parlay::tabulate(size_of(new_nghs), [&](size_t j) {
+              return std::make_pair((new_nghs)[j], index);
             });
         return edges;
       });
+      // TODO: fix this use of "synchronize", which is basically
+      // setting the new_nghs to be the current nghs of each of the
+      // inserted points.
       parlay::parallel_for(floor, ceiling, [&](size_t i) {
         synchronize(v[shuffled_inserts[i]]);
       });
-      auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
-      // finally, add the bidirectional edges; if they do not make
-      // the vertex exceed the degree bound, just add them to out_nbhs;
-      // otherwise, use robustPrune on the vertex with user-specified alpha
-      // std::cout << "here4" << std::endl;
-      parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
-        auto[index, candidates] = grouped_by[j];
-        int newsize = candidates.size() + size_of(v[index]->out_nbh);
-        if (newsize <= maxDeg) {
-          for (const int& k : candidates) add_nbh(k, v[index]);
-        } else {
-          parlay::sequence<int> new_out_2(maxDeg, -1);
-          v[index]->new_nbh =
-              parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-          robustPrune(v[index], candidates, v, r2_alpha);
-          synchronize(v[index]);
+
+      auto kv_pairs = parlay::tabulate(ceiling - floor, [&](size_t i) {
+        node_id index = shuffled_inserts[i + floor];
+        auto new_nghs =
+            parlay::make_slice(new_out.begin() + maxDeg * i,
+                               new_out.begin() + maxDeg * (i + 1));
+        size_t nghs_size = size_of(new_nghs);
+        auto nghs_alloc = cpam::utils::new_array_no_init<int>(nghs_size);
+        for (size_t j=0; j<nghs_size; ++j) {
+          nghs_alloc[j] = new_nghs[j];
         }
+        auto node = ann_node(v[index].coordinates.begin(), nghs_size, nghs_alloc);
+        return std::make_tuple(index, node);
       });
+
+//      auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
+//      // finally, add the bidirectional edges; if they do not make
+//      // the vertex exceed the degree bound, just add them to out_nbhs;
+//      // otherwise, use robustPrune on the vertex with user-specified alpha
+//      // std::cout << "here4" << std::endl;
+//      parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
+//        auto[index, candidates] = grouped_by[j];
+//        int newsize = candidates.size() + size_of(v[index]->out_nbh);
+//        if (newsize <= maxDeg) {
+//          for (const int& k : candidates) add_nbh(k, v[index]);
+//        } else {
+//          parlay::sequence<int> new_out_2(maxDeg, -1);
+//          v[index]->new_nbh =
+//              parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
+//          robustPrune(v[index], candidates, v, r2_alpha);
+//          synchronize(v[index]);
+//        }
+//      });
 
       // std::cout << "here5" << std::endl;
       inc += 1;
