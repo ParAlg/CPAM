@@ -27,8 +27,8 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
     std::cout << "Size of dataset: " << v.size() << std::endl;
 
     using findex = knn_index<T>;
-    findex I(maxDeg, beamSize, alpha, d);
-    I.build_index(v, parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+    findex I(v, maxDeg, beamSize, alpha, d);
+    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
 //    t.next("Built index");
 //    if(report_stats){
 //      graph_stats(v);

@@ -9,22 +9,26 @@
 
 template <typename T>
 struct ann_node_data {
-  // The start of the coordinates for this point. The dimensionality d
-  // is known by the index, so there's no need to redundantly store it
-  // per-point.
-  T* coordinates;
-
   // Ids of the neighboring nodes of this point in the underlying
   // proximity graph.
   node_id num_neighbors;
   node_id* neighbors;
 
+  // parlay::sequence<node_id> neighbors;  (copy constructor called
+  // too many times).
+  // TODO: replace neighbors/num_neighbors with cpam::pam_map<node_id,
+  // B'> where B' >= maxDeg.
+
   ann_node_data()
-      : coordinates(nullptr), num_neighbors(0), neighbors(nullptr) {}
-  ann_node_data(T* coordinates, node_id num_neighbors, node_id* neighbors)
-      : coordinates(coordinates),
-        num_neighbors(num_neighbors),
+      : num_neighbors(0), neighbors(nullptr) {}
+  ann_node_data(node_id num_neighbors, node_id* neighbors)
+      : num_neighbors(num_neighbors),
         neighbors(neighbors) {}
+
+  ann_node_data(const ann_node_data& other) {
+    num_neighbors = other.num_neighbors;
+    neighbors = other.neighbors;
+  }
 };
 
 template <typename T>
@@ -86,7 +90,7 @@ struct ann_graph {
       assert(false);  // TODO: In general this case can occur---need to dealloc prev_node.
       return new_node;
     };
-    V = multi_insert_sorted(std::move(V), entries, replace);
+    V = ann_node_tree::multi_insert_sorted(std::move(V), parlay::make_slice(entries), replace);
   }
 
   std::optional<readonly_node> get_node(node_id id) {
@@ -98,14 +102,6 @@ struct ann_graph {
       return readonly_node(id, in_opt);
     }
     return {};
-  }
-
-  T* get_coordinates(node_id id) {
-    auto opt = V.find(id);
-    if (opt.has_value()) {
-      return opt->coordinates;
-    }
-    return nullptr;
   }
 
 };
