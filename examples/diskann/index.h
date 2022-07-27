@@ -42,22 +42,35 @@ struct knn_index {
   using slice_idx = decltype(make_slice(parlay::sequence<index_pair>()));
   using fine_sequence = parlay::sequence<int>;
 
-  knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize, double Alpha, size_t dim)
+  knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize,
+            double Alpha, size_t dim)
       : v(v), maxDeg(maxDeg), beamSize(beamSize), alpha(Alpha), d(dim) {
-    std::cout << "Initialized knn_index with maxDeg = " << maxDeg << " beamSize = " << beamSize << " alpha = " << alpha << " dim = " << dim << std::endl;
+    std::cout << "Initialized knn_index with maxDeg = " << maxDeg
+              << " beamSize = " << beamSize << " alpha = " << alpha
+              << " dim = " << dim << std::endl;
   }
 
   void build_index(parlay::sequence<int> inserts) {
     // Find the medoid, which each beamSearch will begin from.
     node_id medoid_id = find_approx_medoid();
-    std::cout << "medoid coordinates = " << medoid->coordinates.begin() << std::endl;
+    std::cout << "medoid coordinates = " << medoid->coordinates.begin()
+              << std::endl;
     G.insert_vertex_inplace(medoid_id, nullptr);
     batch_insert(inserts, 2, .02, false);
-    std::cout << "G.num_vertices = " << G.num_vertices() << " num_edges = " << G.num_edges() << std::endl;
+    std::cout << "G.num_vertices = " << G.num_vertices()
+              << " num_edges = " << G.num_edges() << std::endl;
 
     // compute "self-recall", i.e. recall from base points.
     // Self-recall and query recall being different is an indicator
     // of distribution shift.
+
+    auto print_fn = [&](node_id u, node_id v, empty_weight wgh) -> bool {
+      std::cout << "Neighbor = " << v << std::endl;
+      return true;
+    };
+    auto m = G.get_vertex(medoid_id);
+    std::cout << "Medoid's neighbors: " << std::endl;
+    m.out_neighbors().foreach_cond(print_fn);
 
     compute_self_recall();
   }
@@ -79,7 +92,6 @@ struct knn_index {
   }
 
  private:
-
   // p_coords: query vector coordinates
   // v: database of vectors
   // medoid: "root" of the proximity graph
@@ -126,7 +138,7 @@ struct knn_index {
 
       // TODO: reserve?
       parlay::sequence<int> candidates;
-      auto f = [&] (node_id u, node_id v, empty_weight wgh) {
+      auto f = [&](node_id u, node_id v, empty_weight wgh) {
         if (g(v)) {
           candidates.push_back(v);
         }
@@ -158,23 +170,23 @@ struct knn_index {
   // robustPrune routine as found in DiskANN paper.
   // The new candidate set is added to the supplied array (new_nghs).
   void robustPrune(tvec_point* p, node_id p_id,
-                   parlay::sequence<pid> candidates,
-                   double alpha,
+                   parlay::sequence<pid> candidates, double alpha,
                    parlay::slice<int*, int*> new_nghs, bool add = true) {
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
       auto map_f = [&](node_id u, node_id neighbor_id, empty_weight weight) {
         candidates.push_back(std::make_pair(
-            neighbor_id,
-            distance(v[neighbor_id]->coordinates.begin(), p->coordinates.begin(), d)));
+            neighbor_id, distance(v[neighbor_id]->coordinates.begin(),
+                                  p->coordinates.begin(), d)));
         return true;
       };
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
 
+    // TODO: Is this snippet correct? Do we care bout duplicates?
     if (candidates.size() <= maxDeg) {
-      for (size_t i=0; i<candidates.size(); ++i) {
+      for (size_t i = 0; i < candidates.size(); ++i) {
         new_nghs[i] = candidates[i].first;
       }
       return;
@@ -197,8 +209,6 @@ struct knn_index {
 
       new_nbhs.push_back(p_star);
 
-      // TODO: easy optimization: do all get_coordinate calls up-front
-      // and cache them.
       for (size_t i = candidate_idx; i < candidates.size(); i++) {
         int p_prime = candidates[i].first;
         if (p_prime != -1) {
@@ -211,7 +221,7 @@ struct knn_index {
         }
       }
     }
-    for (size_t i=0; i<new_nbhs.size(); ++i) {
+    for (size_t i = 0; i < new_nbhs.size(); ++i) {
       new_nghs[i] = new_nbhs[i];  // change names
     }
   }
@@ -219,8 +229,7 @@ struct knn_index {
   // wrapper to allow calling robustPrune on a sequence of candidates
   // that do not come with precomputed distances
   void robustPrune(Tvec_point<T>* p, node_id p_id,
-                   parlay::sequence<int>& candidates,
-                   double alpha,
+                   parlay::sequence<int>& candidates, double alpha,
                    parlay::slice<int*, int*> new_nghs, bool add = true) {
     parlay::sequence<pid> cc;
     auto p_vertex = G.get_vertex(p_id);
@@ -229,29 +238,33 @@ struct knn_index {
     cc.reserve(candidates.size() + p_ngh_size);
     for (size_t i = 0; i < candidates.size(); ++i) {
       cc.push_back(std::make_pair(
-          candidates[i], distance(v[candidates[i]]->coordinates.begin(), p->coordinates.begin(), d)));
+          candidates[i], distance(v[candidates[i]]->coordinates.begin(),
+                                  p->coordinates.begin(), d)));
     }
     robustPrune(p, p_id, std::move(cc), alpha, new_nghs, add);
   }
 
-  //special size function
+  // special size function
   template <class G>
   static int size_of(parlay::slice<G*, G*> nbh) {
-  	int size = 0;
-  	size_t i=0;
-  	while(nbh[i] != -1 && i<nbh.size()) {size++; i++;}
-  	return size;
+    int size = 0;
+    size_t i = 0;
+    while (nbh[i] != -1 && i < nbh.size()) {
+      size++;
+      i++;
+    }
+    return size;
   }
 
   void batch_insert(parlay::sequence<int>& inserts, double base = 2,
                     double max_fraction = .02, bool random_order = true) {
-    for (int p : inserts) {
-      if (p < 0 || p > (int)v.size()) {
-        std::cout << "ERROR: invalid or already inserted point " << p
-                  << " given to batch_insert" << std::endl;
-        abort();
-      }
-    }
+    //    for (int p : inserts) {
+    //      if (p < 0 || p > (int)v.size()) {
+    //        std::cout << "ERROR: invalid or already inserted point " << p
+    //                  << " given to batch_insert" << std::endl;
+    //        abort();
+    //      }
+    //    }
     std::cout << "here" << std::endl;
 
     size_t n = v.size();
@@ -281,8 +294,8 @@ struct knn_index {
         count += static_cast<size_t>(max_batch_size);
       }
 
-      std::cout << "Start of batch insertion round: ceiling = " << ceiling << " floor = " << floor
-                << std::endl;
+      std::cout << "Start of batch insertion round: ceiling = " << ceiling
+                << " floor = " << floor << std::endl;
 
       parlay::sequence<int> new_out =
           parlay::sequence<int>(maxDeg * (ceiling - floor), -1);
@@ -291,14 +304,9 @@ struct knn_index {
       // robustPrune with the visited list as its candidate set
       parlay::parallel_for(floor, ceiling, [&](size_t i) {
         size_t index = shuffled_inserts[i];
-        // v[index]->new_nbh =
-        //    parlay::make_slice(new_out.begin() + maxDeg * (i - floor),
-        //                       new_out.begin() + maxDeg * (i + 1 - floor));
 
         parlay::sequence<pid> visited =
-            (beam_search(v[index]->coordinates.begin(), beamSize))
-                .second;
-        // if (report_stats) v[index]->cnt = visited.size();
+            (beam_search(v[index]->coordinates.begin(), beamSize)).second;
         auto new_nghs =
             parlay::make_slice(new_out.begin() + maxDeg * (i - floor),
                                new_out.begin() + maxDeg * (i + 1 - floor));
@@ -308,117 +316,122 @@ struct knn_index {
       // New neighbors of each point written into new_nbhs (above).
       // Not yet added to the graph G.
 
+      // make each edge bidirectional by first adding each new edge
+      // (i,j) to a sequence, then semisorting the sequence by key values
+      // std::cout << "here3" << std::endl;
+      auto to_flatten = parlay::tabulate(ceiling - floor, [&](size_t i) {
+        int index = shuffled_inserts[i + floor];
 
-       // make each edge bidirectional by first adding each new edge
-       // (i,j) to a sequence, then semisorting the sequence by key values
-       // std::cout << "here3" << std::endl;
-       auto to_flatten = parlay::tabulate(ceiling - floor, [&](size_t i) {
-         int index = shuffled_inserts[i + floor];
+        auto new_nghs = parlay::make_slice(new_out.begin() + maxDeg * i,
+                                           new_out.begin() + maxDeg * (i + 1));
 
-         auto new_nghs =
-             parlay::make_slice(new_out.begin() + maxDeg * i,
-                                new_out.begin() + maxDeg * (i + 1));
+        auto edges = parlay::tabulate(size_of(new_nghs), [&](size_t j) {
+          return std::make_pair((new_nghs)[j], index);
+        });
+        return edges;
+      });
 
-         auto edges =
-             parlay::tabulate(size_of(new_nghs), [&](size_t j) {
-               return std::make_pair((new_nghs)[j], index);
-             });
-         return edges;
-       });
+      //       std::cout << "Edges being considered this round:" << std::endl;
+      //       for (size_t i=0; i<to_flatten.size(); ++i) {
+      //         auto& edges = to_flatten[i];
+      //         for (size_t j=0; j<edges.size(); ++j) {
+      //           std::cout << edges[j].first << " " << edges[j].second <<
+      //           std::endl;
+      //         }
+      //       }
+      //       std::cout << "Done:" << std::endl;
 
-//       std::cout << "Edges being considered this round:" << std::endl;
-//       for (size_t i=0; i<to_flatten.size(); ++i) {
-//         auto& edges = to_flatten[i];
-//         for (size_t j=0; j<edges.size(); ++j) {
-//           std::cout << edges[j].first << " " << edges[j].second << std::endl;
-//         }
-//       }
-//       std::cout << "Done:" << std::endl;
+      auto KVs = parlay::tabulate(ceiling - floor, [&](size_t i) {
+        node_id index = shuffled_inserts[i + floor];
+        auto new_nghs = parlay::make_slice(new_out.begin() + maxDeg * i,
+                                           new_out.begin() + maxDeg * (i + 1));
+        size_t nghs_size = size_of(new_nghs);
+        auto begin =
+            (std::tuple<node_id, empty_weight>*)(new_out.begin() + maxDeg * i);
+        auto tree = edge_tree(begin, begin + nghs_size);
+        auto tree_ptr = tree.root;
+        tree.root = nullptr;
 
-       auto KVs = parlay::tabulate(ceiling - floor, [&](size_t i) {
-         node_id index = shuffled_inserts[i + floor];
-         auto new_nghs =
-             parlay::make_slice(new_out.begin() + maxDeg * i,
-                                new_out.begin() + maxDeg * (i + 1));
-         size_t nghs_size = size_of(new_nghs);
-         auto begin = (std::tuple<node_id, empty_weight>*)(new_out.begin() + maxDeg * i);
-         auto tree = edge_tree(begin, begin + nghs_size);
-         auto tree_ptr = tree.root;
-         tree.root = nullptr;
+        return std::make_tuple(index, tree_ptr);
+      });
 
-         return std::make_tuple(index, tree_ptr);
-       });
+      std::cout << "Number of vertex insertions for batch: " << inc << " : "
+                << KVs.size() << std::endl;
+      G.insert_vertices_batch(KVs.size(), KVs.begin());
+      std::cout << "After inserts, G.num_vertices() (max node_id) = "
+                << G.num_vertices() << std::endl;
+      ;
 
-       std::cout << "Number of vertex insertions for batch: " << inc << " : " << KVs.size() << std::endl;
-       G.insert_vertices_batch(KVs.size(), KVs.begin());
-       std::cout << "After inserts, G.num_vertices() (max node_id) = " << G.num_vertices() << std::endl;;
+      //       for (size_t i=0; i<std::min(KVs.size(), (size_t)100); ++i) {
+      //         auto [id, edges] = KVs[i];
+      //         std::cout << "id = " << id << std::endl;
+      //         edge_tree t;
+      //         t.root = edges;
+      //         std::cout << "ngh size = " << t.size() << std::endl;
+      //         t.root = nullptr;
+      //       }
 
-//       for (size_t i=0; i<std::min(KVs.size(), (size_t)100); ++i) {
-//         auto [id, edges] = KVs[i];
-//         std::cout << "id = " << id << std::endl;
-//         edge_tree t;
-//         t.root = edges;
-//         std::cout << "ngh size = " << t.size() << std::endl;
-//         t.root = nullptr;
-//       }
+      // TODO: update the code below:
+      auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
+      auto reverse_KVs =
+          parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
 
-       // TODO: update the code below:
-       auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
-       auto reverse_KVs = parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
+      //       auto print_fn = [&] (const auto& et) -> bool {
+      //         std::cout << "Neighbor = " << std::get<0>(et) << std::endl;
+      //         return true;
+      //       };
 
-//       auto print_fn = [&] (const auto& et) -> bool {
-//         std::cout << "Neighbor = " << std::get<0>(et) << std::endl;
-//         return true;
-//       };
+      // finally, add the bidirectional edges; if they do not make
+      // the vertex exceed the degree bound, just add them to out_nbhs;
+      // otherwise, use robustPrune on the vertex with user-specified alpha
+      std::cout << "here4" << std::endl;
+      parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
+        auto[index, candidates] = grouped_by[j];
+        // TODO: simpler case when newsize <= maxDeg.
+        parlay::sequence<int> new_out_2(maxDeg, -1);
+        auto output_slice =
+            parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
+        robustPrune(v[index], index, candidates, alpha, output_slice);
+        size_t deg = size_of(output_slice);
+        auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
+        auto tree = edge_tree(begin, begin + deg);
+        //         std::cout << "For id = " << index << " new_tree size = " <<
+        //         tree.size() << " candidates size = " << candidates.size() <<
+        //         std::endl;
+        reverse_KVs[j] = {index, tree.root};
+        tree.root = nullptr;
+      });
 
-       // finally, add the bidirectional edges; if they do not make
-       // the vertex exceed the degree bound, just add them to out_nbhs;
-       // otherwise, use robustPrune on the vertex with user-specified alpha
-       std::cout << "here4" << std::endl;
-       parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
-         auto[index, candidates] = grouped_by[j];
-         // TODO: simpler case when newsize <= maxDeg.
-         parlay::sequence<int> new_out_2(maxDeg, -1);
-         auto output_slice =
-             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-         robustPrune(v[index], index, candidates, alpha, output_slice);
-         size_t deg = size_of(output_slice);
-         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
-         auto tree = edge_tree(begin, begin + deg);
-//         std::cout << "For id = " << index << " new_tree size = " << tree.size() << " candidates size = " << candidates.size() << std::endl;
-         reverse_KVs[j] = {index, tree.root};
-         tree.root = nullptr;
-       });
+      std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
 
-       std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+      //       for (size_t i=0; i<std::min(reverse_KVs.size(), (size_t)100);
+      //       ++i) {
+      //         auto [id, edges] = reverse_KVs[i];
+      //         std::cout << "id = " << id << std::endl;
+      //         edge_tree t;
+      //         t.root = edges;
+      //         std::cout << "ngh size = " << t.size() << std::endl;
+      //         t.root = nullptr;
+      //
+      ////         auto f = [&] (node_id u, node_id v, empty_weight wgh) {
+      ////           std::cout << u << " " << v << std::endl;
+      ////           return true;
+      ////         };
+      ////
+      ////         std::cout << "New neighbors = " << std::endl;
+      ////         t.foreach_cond(t, print_fn);
+      ////
+      ////         t.root = nullptr;
+      ////         std::cout << "Current neighbors = " << std::endl;
+      ////         G.get_vertex(id).out_neighbors().foreach_cond(f);
+      //       }
 
-//       for (size_t i=0; i<std::min(reverse_KVs.size(), (size_t)100); ++i) {
-//         auto [id, edges] = reverse_KVs[i];
-//         std::cout << "id = " << id << std::endl;
-//         edge_tree t;
-//         t.root = edges;
-//         std::cout << "ngh size = " << t.size() << std::endl;
-//         t.root = nullptr;
-//
-////         auto f = [&] (node_id u, node_id v, empty_weight wgh) {
-////           std::cout << u << " " << v << std::endl;
-////           return true;
-////         };
-////
-////         std::cout << "New neighbors = " << std::endl;
-////         t.foreach_cond(t, print_fn);
-////
-////         t.root = nullptr;
-////         std::cout << "Current neighbors = " << std::endl;
-////         G.get_vertex(id).out_neighbors().foreach_cond(f);
-//       }
-
-       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
+      G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
       std::cout << "here5" << std::endl;
-//      if (inc == 3) {
-//        exit(0);
-//      }
+      //      if (inc == 3) {
+      //        exit(0);
+      //      }
       inc += 1;
     }
   }
@@ -481,27 +494,31 @@ struct knn_index {
   parlay::sequence<node_id> all_distances_sorted(node_id sample_id) {
     size_t n = G.num_vertices();
     auto sample_coord = v[sample_id]->coordinates.begin();
-    auto dist_and_id = parlay::tabulate(n, [&] (size_t i) -> std::pair<double, node_id> {
-      auto i_coord = v[i]->coordinates.begin();
-      return {distance(i_coord, sample_coord, d), i};
-    });
+    auto dist_and_id =
+        parlay::tabulate(n, [&](size_t i) -> std::pair<double, node_id> {
+          auto i_coord = v[i]->coordinates.begin();
+          return {distance(i_coord, sample_coord, d), i};
+        });
     parlay::sort_inplace(dist_and_id);
-    return parlay::map(dist_and_id, [&] (const auto& pair) { return pair.second; });
+    return parlay::map(dist_and_id,
+                       [&](const auto& pair) { return pair.second; });
   }
 
   void compute_self_recall(size_t num_samples = 1000) {
     size_t n = G.num_vertices();
-    auto ids = parlay::tabulate(num_samples, [&] (node_id i) -> node_id {
+    auto ids = parlay::tabulate(num_samples, [&](node_id i) -> node_id {
       return parlay::hash32(i) % n;
     });
     std::vector<int> ks = {1, 2, 4, 8, 16, 32, 64, 128, 256};
     parlay::sequence<std::vector<int>> counts(num_samples);
-    parlay::parallel_for(0, num_samples, [&] (size_t i) {
+    parlay::parallel_for(0, num_samples, [&](size_t i) {
       auto sample_id = ids[i];
       auto ground_truth_nn = all_distances_sorted(sample_id);
       for (int k : ks) {
-        auto neighbors = query(v[sample_id]->coordinates.begin(), k, std::max((size_t)(2*k + 1), (size_t)maxDeg));
-        auto tab = std::set(ground_truth_nn.begin(), ground_truth_nn.begin() + k);
+        auto neighbors = query(v[sample_id]->coordinates.begin(), k,
+                               std::max((size_t)(2 * k + 1), (size_t)maxDeg));
+        auto tab =
+            std::set(ground_truth_nn.begin(), ground_truth_nn.begin() + k);
         size_t hits = 0;
         for (auto ngh : neighbors) {
           if (tab.find(ngh) != tab.end()) ++hits;
@@ -510,9 +527,11 @@ struct knn_index {
       }
     });
     for (auto k : ks) {
-      auto ds = parlay::delayed_seq<size_t>(num_samples, [&] (size_t i) { return counts[i][k]; });
+      auto ds = parlay::delayed_seq<size_t>(
+          num_samples, [&](size_t i) { return counts[i][k]; });
       auto tot = parlay::reduce(ds);
-      std::cout << k << "@" << k << ": " << (static_cast<double>(tot)/(k*num_samples)) << std::endl;
+      std::cout << k << "@" << k << ": "
+                << (static_cast<double>(tot) / (k * num_samples)) << std::endl;
     }
   }
 };
