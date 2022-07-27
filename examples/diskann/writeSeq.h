@@ -77,7 +77,7 @@ namespace benchIO {
 
   inline int xToStringLen(charstring const &a) { return a.size();}
   inline void xToString(char* s, charstring const &a) {
-    for (int i=0; i < a.size(); i++) s[i] = a[i];}
+    for (size_t i=0; i < a.size(); i++) s[i] = a[i];}
 
   inline int xToStringLen(long a) { return 21;}
   inline void xToString(char* s, long a) { sprintf(s,"%ld",a);}
@@ -152,7 +152,6 @@ namespace benchIO {
   int writeSeqToFile(string header,
 		     parlay::sequence<T> const &A,
 		     char const *fileName) {
-    auto a = A[0];
     //xToStringLena(a);
     ofstream file (fileName, ios::out | ios::binary);
     if (!file.is_open()) {

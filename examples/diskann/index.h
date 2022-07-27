@@ -52,7 +52,6 @@ struct knn_index {
     node_id medoid_id = find_approx_medoid();
     std::cout << "medoid coordinates = " << medoid->coordinates.begin() << std::endl;
     G.insert_vertex_inplace(medoid_id, nullptr);
-    auto x = G.get_vertex(medoid_id);
     batch_insert(inserts, 2, .02, false);
     std::cout << "G.num_vertices = " << G.num_vertices() << " num_edges = " << G.num_edges() << std::endl;
 
@@ -71,7 +70,6 @@ struct knn_index {
     }
     auto pairs = beam_search(query_coords, beamSizeQ);
     auto& beamElts = pairs.first;
-    auto& visitedElts = pairs.second;
     parlay::sequence<node_id> neighbors(k);
     // Ignoring reporting the point itself for now.
     for (int j = 0; j < k; j++) {
@@ -380,7 +378,6 @@ struct knn_index {
        std::cout << "here4" << std::endl;
        parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
          auto[index, candidates] = grouped_by[j];
-         int newsize = candidates.size() + G.get_vertex(index).out_degree();
          // TODO: simpler case when newsize <= maxDeg.
          parlay::sequence<int> new_out_2(maxDeg, -1);
          auto output_slice =
