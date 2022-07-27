@@ -55,6 +55,12 @@ struct knn_index {
     auto x = G.get_vertex(medoid_id);
     batch_insert(inserts, 2, .02, false);
     std::cout << "G.num_vertices = " << G.num_vertices() << " num_edges = " << G.num_edges() << std::endl;
+
+    // compute "self-recall", i.e. recall from base points.
+    // Self-recall and query recall being different is an indicator
+    // of distribution shift.
+
+    compute_self_recall();
   }
 
  private:
@@ -65,7 +71,7 @@ struct knn_index {
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
   std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
-      T* p_coords, Tvec_point<T>* medoid, int beamSize, unsigned d) {
+      T* p_coords, int beamSize) {
     // initialize data structures
     // pid = std::pair<int, float>
     std::vector<pid> visited;
@@ -276,7 +282,7 @@ struct knn_index {
         //                       new_out.begin() + maxDeg * (i + 1 - floor));
 
         parlay::sequence<pid> visited =
-            (beam_search(v[index]->coordinates.begin(), medoid, beamSize, d))
+            (beam_search(v[index]->coordinates.begin(), beamSize))
                 .second;
         // if (report_stats) v[index]->cnt = visited.size();
         auto new_nghs =
@@ -457,5 +463,60 @@ struct knn_index {
     medoid = medoid_helper(&centroidp, parlay::make_slice(v));
     std::cout << "Medoid ID: " << medoid->id << std::endl;
     return medoid->id;
+  }
+
+  parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
+    if ((k + 1) > beamSizeQ) {
+      std::cout << "Error: beam search parameter Q = " << beamSizeQ
+                << " same size or smaller than k = " << k << std::endl;
+      abort();
+    }
+    auto pairs = beam_search(query_coords, beamSizeQ);
+    auto& beamElts = pairs.first;
+    auto& visitedElts = pairs.second;
+    parlay::sequence<node_id> neighbors(k);
+    // Ignoring reporting the point itself for now.
+    for (int j = 0; j < k; j++) {
+      neighbors[j] = beamElts[j].first;
+    }
+    return neighbors;
+  }
+
+  parlay::sequence<node_id> all_distances_sorted(node_id sample_id) {
+    size_t n = G.num_vertices();
+    auto sample_coord = v[sample_id]->coordinates.begin();
+    auto dist_and_id = parlay::tabulate(n, [&] (size_t i) -> std::pair<double, node_id> {
+      auto i_coord = v[i]->coordinates.begin();
+      return {distance(i_coord, sample_coord, d), i};
+    });
+    parlay::sort_inplace(dist_and_id);
+    return parlay::map(dist_and_id, [&] (const auto& pair) { return pair.second; });
+  }
+
+  void compute_self_recall(size_t num_samples = 1000) {
+    size_t n = G.num_vertices();
+    auto ids = parlay::tabulate(num_samples, [&] (node_id i) -> node_id {
+      return parlay::hash32(i) % n;
+    });
+    std::vector<int> ks = {1, 2, 4, 8, 16, 32, 64, 128, 256};
+    parlay::sequence<std::vector<int>> counts(num_samples);
+    parlay::parallel_for(0, num_samples, [&] (size_t i) {
+      auto sample_id = ids[i];
+      auto ground_truth_nn = all_distances_sorted(sample_id);
+      for (int k : ks) {
+        auto neighbors = query(v[sample_id]->coordinates.begin(), k, std::max((size_t)(2*k + 1), (size_t)maxDeg));
+        auto tab = std::set(ground_truth_nn.begin(), ground_truth_nn.begin() + k);
+        size_t hits = 0;
+        for (auto ngh : neighbors) {
+          if (tab.find(ngh) != tab.end()) ++hits;
+        }
+        counts[i].push_back(hits);
+      }
+    });
+    for (auto k : ks) {
+      auto ds = parlay::delayed_seq<size_t>(num_samples, [&] (size_t i) { return counts[i][k]; });
+      auto tot = parlay::reduce(ds);
+      std::cout << k << "@" << k << ": " << (static_cast<double>(tot)/(k*num_samples)) << std::endl;
+    }
   }
 };
