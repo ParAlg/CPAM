@@ -30,13 +30,17 @@ struct symmetric_graph {
   struct vertex_entry {
     using key_t = vertex_id;
     using val_t = edge_node*;
-    using aug_t = edge_id;
+    using aug_t = std::pair<vertex_id, edge_id>;
     static inline bool comp(key_t a, key_t b) { return a < b; }
-    static aug_t get_empty() { return 0; }
+    static aug_t get_empty() { return std::make_pair(0, 0); }
     static aug_t from_entry(const key_t& k, const val_t& v) {
-      return edge_tree::Tree::size(v);
+      return std::make_pair(k, edge_tree::Tree::size(v));
     }
-    static aug_t combine(aug_t a, aug_t b) { return a + b; }
+    static aug_t combine(aug_t a, aug_t b) {
+      auto& [a_v, a_e] = a;
+      auto& [b_v, b_e] = b;
+      return {std::max(a_v, b_v), a_e + b_e};
+    }
     using entry_t = std::tuple<key_t, val_t>;
   };
 #ifdef USE_PAM_UPPER
@@ -209,9 +213,9 @@ struct symmetric_graph {
   }
 
   // Note that it's important to use n and not V.size() here.
-  size_t num_vertices() { return n; }
+  size_t num_vertices() { return V.aug_val().first; }
 
-  size_t num_edges() { return V.aug_val(); }
+  size_t num_edges() { return V.aug_val().second; }
 
   vertex get_vertex(vertex_id v) {
     auto opt = V.find(v);
