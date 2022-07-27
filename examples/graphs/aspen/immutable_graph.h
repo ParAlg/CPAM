@@ -351,6 +351,11 @@ struct symmetric_graph {
     }
   }
 
+  void insert_vertex_inplace(vertex_id id, edge_tree* e) {
+    auto et = typename vertex_entry::entry_t(id, e);
+    V.insert(et);
+  }
+
   // Trying different versions of batch insert:
   // (1) insert_edges_batch_1:
   //
