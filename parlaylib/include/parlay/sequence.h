@@ -101,9 +101,7 @@ class sequence : protected sequence_internal::sequence_base<T, Allocator, Enable
   sequence() : sequence_base_type() {}
 
   // creates a copy of s
-  sequence(const sequence_type& s) : sequence_base_type(s.storage) {
-    std::cout << "Copy" << std::endl;
-  }
+  sequence(const sequence_type& s) : sequence_base_type(s.storage) {}
 
   // moves rv
   sequence(sequence_type&& rv) noexcept : sequence_base_type(std::move(rv.storage)) {}

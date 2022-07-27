@@ -176,14 +176,12 @@ struct symmetric_graph {
   using SymGraph = symmetric_graph<weight>;
 
   vertex_tree V;
-  size_t n;  // num vertices
 
   // Build from a static graph.
   symmetric_graph(std::tuple<size_t, size_t, uintT*, uintE*>& parsed_graph) {
     auto edges = graph_to_edges<empty>(parsed_graph);
     SymGraph::reserve(std::get<0>(parsed_graph), std::get<1>(parsed_graph));
     V = from_edges(edges);
-    n = std::get<0>(parsed_graph);
   }
 
   // Set from a provided root (no ref-ct bump)
@@ -213,9 +211,9 @@ struct symmetric_graph {
   }
 
   // Note that it's important to use n and not V.size() here.
-  size_t num_vertices() { return V.aug_val().first; }
+  size_t num_vertices() const { return V.aug_val().first; }
 
-  size_t num_edges() { return V.aug_val().second; }
+  size_t num_edges() const { return V.aug_val().second; }
 
   vertex get_vertex(vertex_id v) {
     auto opt = V.find(v);
@@ -305,7 +303,7 @@ struct symmetric_graph {
     size_t total_bytes = edge_tree_bytes + vertex_tree_bytes;
     size_t m = num_edges();
 
-    std::cout << "csv: " << graphname << "," << n << "," << m << "," << mode
+    std::cout << "csv: " << graphname << "," << num_vertices() << "," << num_edges() << "," << mode
               << "," << total_bytes << "," << vertex_tree_bytes << ","
               << edge_tree_bytes << std::endl;
   }
@@ -335,6 +333,7 @@ struct symmetric_graph {
 
   template <class Edge>
   void sort_updates(Edge* edges, size_t m) const {
+    size_t n = num_vertices();
     size_t vtx_bits = parlay::log2_up(n);
     auto edge_to_long = [vtx_bits](Edge e) -> size_t {
       return (static_cast<size_t>(std::get<0>(e)) << vtx_bits) +
@@ -354,6 +353,26 @@ struct symmetric_graph {
   void insert_vertex_inplace(vertex_id id, edge_tree* e) {
     auto et = typename vertex_entry::entry_t(id, e);
     V.insert(et);
+  }
+
+  // m : number of edges
+  // edges: pairs of edges to insert. Currently working with undirected graphs;
+  template <class VtxEntry>
+  void insert_vertices_batch(size_t m, VtxEntry* E) {
+    timer pt("Insert", false);
+    timer t("Insert", false);
+    auto E_slice = parlay::make_slice(E, E + m);
+    auto key_less = [&] (const VtxEntry& l, const VtxEntry& r) {
+      return std::get<0>(l) < std::get<0>(r);
+    };
+    parlay::sort_inplace(E_slice, key_less);
+
+    auto combine_op = [&] (edge_node* cur, edge_node* inc) {
+      edge_tree t;
+      t.root = cur;  // Lets the ref-cnt get decremented here.
+      return inc;
+    };
+    V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
   }
 
   // Trying different versions of batch insert:

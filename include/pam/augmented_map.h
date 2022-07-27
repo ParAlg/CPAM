@@ -27,7 +27,7 @@ public:
     return M(Tree::aug_filter(m.get_root(), f)); }
 
   // extract the augmented values
-  A aug_val() { return Tree::aug_val(Map::root); }
+  A aug_val() const { return Tree::aug_val(Map::root); }
 
   A aug_left (const K& key) {
     typename Tree::aug_sum_t a;
