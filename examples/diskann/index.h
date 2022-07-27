@@ -152,6 +152,13 @@ struct knn_index {
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
 
+    if (candidates.size() <= maxDeg) {
+      for (size_t i=0; i<candidates.size(); ++i) {
+        new_nghs[i] = candidates[i].first;
+      }
+      return;
+    }
+
     // Sort the candidate set in reverse order according to distance from p.
     auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
@@ -191,8 +198,8 @@ struct knn_index {
   // wrapper to allow calling robustPrune on a sequence of candidates
   // that do not come with precomputed distances
   void robustPrune(Tvec_point<T>* p, node_id p_id,
-                   parlay::sequence<int> candidates,
-                  double alpha,
+                   parlay::sequence<int>& candidates,
+                   double alpha,
                    parlay::slice<int*, int*> new_nghs, bool add = true) {
     parlay::sequence<pid> cc;
     auto p_vertex = G.get_vertex(p_id);
@@ -299,6 +306,15 @@ struct knn_index {
          return edges;
        });
 
+//       std::cout << "Edges being considered this round:" << std::endl;
+//       for (size_t i=0; i<to_flatten.size(); ++i) {
+//         auto& edges = to_flatten[i];
+//         for (size_t j=0; j<edges.size(); ++j) {
+//           std::cout << edges[j].first << " " << edges[j].second << std::endl;
+//         }
+//       }
+//       std::cout << "Done:" << std::endl;
+
        auto KVs = parlay::tabulate(ceiling - floor, [&](size_t i) {
          node_id index = shuffled_inserts[i + floor];
          auto new_nghs =
@@ -317,9 +333,23 @@ struct knn_index {
        G.insert_vertices_batch(KVs.size(), KVs.begin());
        std::cout << "After inserts, G.num_vertices() (max node_id) = " << G.num_vertices() << std::endl;;
 
+//       for (size_t i=0; i<std::min(KVs.size(), (size_t)100); ++i) {
+//         auto [id, edges] = KVs[i];
+//         std::cout << "id = " << id << std::endl;
+//         edge_tree t;
+//         t.root = edges;
+//         std::cout << "ngh size = " << t.size() << std::endl;
+//         t.root = nullptr;
+//       }
+
        // TODO: update the code below:
        auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
        auto reverse_KVs = parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
+
+//       auto print_fn = [&] (const auto& et) -> bool {
+//         std::cout << "Neighbor = " << std::get<0>(et) << std::endl;
+//         return true;
+//       };
 
        // finally, add the bidirectional edges; if they do not make
        // the vertex exceed the degree bound, just add them to out_nbhs;
@@ -336,13 +366,40 @@ struct knn_index {
          size_t deg = size_of(output_slice);
          auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
          auto tree = edge_tree(begin, begin + deg);
+//         std::cout << "For id = " << index << " new_tree size = " << tree.size() << " candidates size = " << candidates.size() << std::endl;
          reverse_KVs[j] = {index, tree.root};
          tree.root = nullptr;
        });
+
        std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+
+//       for (size_t i=0; i<std::min(reverse_KVs.size(), (size_t)100); ++i) {
+//         auto [id, edges] = reverse_KVs[i];
+//         std::cout << "id = " << id << std::endl;
+//         edge_tree t;
+//         t.root = edges;
+//         std::cout << "ngh size = " << t.size() << std::endl;
+//         t.root = nullptr;
+//
+////         auto f = [&] (node_id u, node_id v, empty_weight wgh) {
+////           std::cout << u << " " << v << std::endl;
+////           return true;
+////         };
+////
+////         std::cout << "New neighbors = " << std::endl;
+////         t.foreach_cond(t, print_fn);
+////
+////         t.root = nullptr;
+////         std::cout << "Current neighbors = " << std::endl;
+////         G.get_vertex(id).out_neighbors().foreach_cond(f);
+//       }
+
        G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
       std::cout << "here5" << std::endl;
+//      if (inc == 3) {
+//        exit(0);
+//      }
       inc += 1;
     }
   }

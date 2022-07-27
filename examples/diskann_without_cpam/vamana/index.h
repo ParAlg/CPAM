@@ -189,6 +189,7 @@ struct knn_index{
 		parlay::sequence<int> rperm;
 		if(random_order) rperm = parlay::random_permutation<int>(static_cast<int>(n), time(NULL));
 		else rperm = parlay::tabulate(v.size(), [&] (int i) {return i;});
+    std::cout << "random_order = " << random_order << std::endl;
 		size_t count = 0;
 		while(count < n){
 			size_t floor;
