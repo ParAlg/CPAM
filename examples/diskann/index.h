@@ -268,17 +268,22 @@ struct knn_index {
         parlay::tabulate(m, [&](size_t i) { return inserts[rperm[i]]; });
     std::cout << "here1" << std::endl;
 
+    size_t floor;
+    size_t ceiling;
     while (count < m) {
-      size_t floor;
-      size_t ceiling;
       if (pow(base, inc) <= max_batch_size) {
+
+//        floor = ceiling;
+//        ceiling = std::min(m, (size_t)std::ceil(floor*base));
+//        count = ceiling - floor;
+
         floor = static_cast<size_t>(pow(base, inc)) - 1;
         ceiling = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
         count = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
-        // std::cout << "here2" << std::endl;
+
       } else {
         floor = count;
-        ceiling = std::min(count + static_cast<size_t>(max_batch_size), m) - 1;
+        ceiling = std::min(count + static_cast<size_t>(max_batch_size), m);
         count += static_cast<size_t>(max_batch_size);
       }
 

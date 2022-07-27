@@ -211,7 +211,7 @@ struct symmetric_graph {
   }
 
   // Note that it's important to use n and not V.size() here.
-  size_t num_vertices() const { return V.aug_val().first; }
+  size_t num_vertices() const { return V.aug_val().first + 1; }
 
   size_t num_edges() const { return V.aug_val().second; }
 
