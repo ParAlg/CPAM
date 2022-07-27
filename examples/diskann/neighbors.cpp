@@ -16,8 +16,11 @@
 #include "IO.h"
 #include "index.h"
 #include "types.h"
+#include "writeSeq.h"
 
 bool report_stats;
+
+using namespace benchIO;
 
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy) {
@@ -34,7 +37,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
 
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy,
- int k, int Q, parlay::sequence<Tvec_point<T>*> q) {
+ int k, int Q, parlay::sequence<Tvec_point<T>*> q, char* outFile) {
   parlay::internal::timer t("ANN",report_stats);
   {
     unsigned d = (v[0]->coordinates).size();
@@ -42,6 +45,26 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
     I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+
+    parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
+    std::cout << "Built index, now performing queries" << std::endl;
+    parlay::parallel_for(0, q.size(), [&] (size_t i) {
+      query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
+    });
+
+    for(auto nbh : query_results[0]) std::cout << nbh << std::endl; 
+
+    if(outFile != NULL){
+      size_t m = q.size() * (k+1);
+      parlay::sequence<unsigned> Pout(m);
+      parlay::parallel_for (0, q.size(), [&] (size_t i) {
+        Pout[(k+1)*i] = q[i]->id;
+        for (int j=0; j < (int) query_results[i].size(); j++) Pout[(k+1)*i + j+1] = query_results[i][j];
+        for(int j=query_results[i].size(); j<k; k++) Pout[(k+1)*i + j+1] = 0;
+      });
+      writeIntSeqToFile(Pout, outFile);
+
+    }
   };
 }
 
@@ -78,7 +101,7 @@ void timeNeighbors(parlay::sequence<Tvec_point<T>>& pts, int rounds, int maxDeg,
     auto q = 
       parlay::tabulate(queries.size(), [&](size_t i) -> Tvec_point<T>* { return &queries[i]; });
       time_loop(rounds, 0, [&]() {},
-              [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta, k, beamSizeQ, q); }, [&]() {});
+              [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta, k, beamSizeQ, q, outFile); }, [&]() {});
   } else{
     time_loop(rounds, 0, [&]() {},
               [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta); }, [&]() {});

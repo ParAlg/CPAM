@@ -63,6 +63,23 @@ struct knn_index {
     compute_self_recall();
   }
 
+  parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
+    if ((k + 1) > beamSizeQ) {
+      std::cout << "Error: beam search parameter Q = " << beamSizeQ
+                << " same size or smaller than k = " << k << std::endl;
+      abort();
+    }
+    auto pairs = beam_search(query_coords, beamSizeQ);
+    auto& beamElts = pairs.first;
+    auto& visitedElts = pairs.second;
+    parlay::sequence<node_id> neighbors(k);
+    // Ignoring reporting the point itself for now.
+    for (int j = 0; j < k; j++) {
+      neighbors[j] = beamElts[j].first;
+    }
+    return neighbors;
+  }
+
  private:
 
   // p_coords: query vector coordinates
@@ -463,23 +480,6 @@ struct knn_index {
     medoid = medoid_helper(&centroidp, parlay::make_slice(v));
     std::cout << "Medoid ID: " << medoid->id << std::endl;
     return medoid->id;
-  }
-
-  parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
-    if ((k + 1) > beamSizeQ) {
-      std::cout << "Error: beam search parameter Q = " << beamSizeQ
-                << " same size or smaller than k = " << k << std::endl;
-      abort();
-    }
-    auto pairs = beam_search(query_coords, beamSizeQ);
-    auto& beamElts = pairs.first;
-    auto& visitedElts = pairs.second;
-    parlay::sequence<node_id> neighbors(k);
-    // Ignoring reporting the point itself for now.
-    for (int j = 0; j < k; j++) {
-      neighbors[j] = beamElts[j].first;
-    }
-    return neighbors;
   }
 
   parlay::sequence<node_id> all_distances_sorted(node_id sample_id) {
