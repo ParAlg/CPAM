@@ -43,7 +43,7 @@ std::pair<char*, size_t> mmapStringFromFile(const char* filename) {
   return std::make_pair(p, n);
 }
 
-auto parse_fvecs(const char* filename, int maxDeg) {
+auto parse_fvecs(const char* filename) {
   auto [fileptr, length] = mmapStringFromFile(filename);
 
   // Each vector is 4 + 4*d bytes.
@@ -58,10 +58,6 @@ auto parse_fvecs(const char* filename, int maxDeg) {
   // std::cout << "Num vectors = " << num_vectors << std::endl;
 
   parlay::sequence<Tvec_point<float>> points(num_vectors);
-
-  parlay::sequence<int> &out_nbh = *new parlay::sequence<int>(maxDeg*num_vectors);
-
-  parlay::parallel_for(0, num_vectors*maxDeg, [&] (size_t i){out_nbh[i] = -1; });
 
   parlay::parallel_for(0, num_vectors, [&] (size_t i) {
     size_t offset_in_bytes = vector_size * i + 4;  // skip dimension
@@ -100,7 +96,7 @@ auto parse_ivecs(const char* filename) {
   return points;
 }
 
-auto parse_bvecs(const char* filename, int maxDeg) {
+auto parse_bvecs(const char* filename) {
 
   auto [fileptr, length] = mmapStringFromFile(filename);
   // Each vector is 4 + d bytes.
@@ -115,10 +111,6 @@ auto parse_bvecs(const char* filename, int maxDeg) {
   size_t num_vectors = length / vector_size;
 
   parlay::sequence<Tvec_point<uint8_t>> points(num_vectors);
-
-  parlay::sequence<int> &out_nbh = *new parlay::sequence<int>(maxDeg*num_vectors);
-
-  parlay::parallel_for(0, num_vectors*maxDeg, [&] (size_t i){out_nbh[i] = -1;});
 
   parlay::parallel_for(0, num_vectors, [&] (size_t i) {
     size_t offset_in_bytes = vector_size * i + 4;  // skip dimension

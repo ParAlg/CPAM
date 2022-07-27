@@ -25,17 +25,26 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
   {
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
-
+    std::cout << "alpha" << alpha << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
     I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
-//    t.next("Built index");
-//    if(report_stats){
-//      graph_stats(v);
-//      t.next("stats");
-//    }
   };
 }
+
+template<typename T>
+void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy,
+ int k, int Q, parlay::sequence<Tvec_point<T>*> q) {
+  parlay::internal::timer t("ANN",report_stats);
+  {
+    unsigned d = (v[0]->coordinates).size();
+    std::cout << "Size of dataset: " << v.size() << std::endl;
+    using findex = knn_index<T>;
+    findex I(v, maxDeg, beamSize, alpha, d);
+    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+  };
+}
+
 
 template <class F, class G, class H>
 void time_loop(int rounds, double delay, F initf, G runf, H endf) {
@@ -58,26 +67,36 @@ void time_loop(int rounds, double delay, F initf, G runf, H endf) {
 
 template <typename T>
 void timeNeighbors(parlay::sequence<Tvec_point<T>>& pts, int rounds, int maxDeg,
-                   int beamSize, double delta, double alpha, char* outFile) {
+                   int beamSize, double alpha, double delta, int k, int beamSizeQ, 
+                   parlay::sequence<Tvec_point<T>>& queries, char* outFile) {
   size_t n = pts.size();
   auto v =
       parlay::tabulate(n, [&](size_t i) -> Tvec_point<T>* { return &pts[i]; });
 
-  time_loop(rounds, 0, [&]() {},
-            [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta); }, [&]() {});
+  if(queries.size() != 0){
+    std::cout << "here" << std::endl; 
+    auto q = 
+      parlay::tabulate(queries.size(), [&](size_t i) -> Tvec_point<T>* { return &queries[i]; });
+      time_loop(rounds, 0, [&]() {},
+              [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta, k, beamSizeQ, q); }, [&]() {});
+  } else{
+    time_loop(rounds, 0, [&]() {},
+              [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta); }, [&]() {});
+  }
 }
 
 int main(int argc, char** argv) {
   commandLine P(argc, argv,
                 "[-a <alpha>] [-d <delta>] [-R <deg>]"
                 "[-L <bm>] [-k <k> ] [-Q <bmq>] [-q <qF>] [-o <oF>] [-r "
-                "<rnds>] [-b <algoOpt>] <inFile>");
+                "<rnds>] <inFile>");
 
   char* iFile = P.getArgument(0);
   char* oFile = P.getOptionValue("-o");
-  int R = P.getOptionIntValue("-R", 5);
+  char* qFile = P.getOptionValue("-q");
+  int R = P.getOptionIntValue("-R", 15);
   if (R < 1) P.badArgument();
-  int L = P.getOptionIntValue("-L", 10);
+  int L = P.getOptionIntValue("-L", 25);
   if (L < 1) P.badArgument();
   int Q = P.getOptionIntValue("-Q", L);
   if (Q < 1) P.badArgument();
@@ -86,7 +105,6 @@ int main(int argc, char** argv) {
   if (k > 1000 || k < 1) P.badArgument();
   double alpha = P.getOptionDoubleValue("-a", 1.2);
   double delta = P.getOptionDoubleValue("-d", .01);
-  int HCNNG = P.getOptionIntValue("-b", 0);
 
   // TODO: add back qfile.
 
@@ -95,18 +113,20 @@ int main(int argc, char** argv) {
   std::string::size_type n = filename.size();
   if (filename[n - 5] == 'b') fvecs = false;
 
-  int maxDeg;
-  if (HCNNG != 0)
-    maxDeg = R * L;
-  else
-    maxDeg = R;
 
   if (fvecs) {  // vectors are floating point coordinates
-    parlay::sequence<Tvec_point<float>> points = parse_fvecs(iFile, maxDeg);
+    parlay::sequence<Tvec_point<float>> points = parse_fvecs(iFile);
     std::cout << "Parsed fvecs, len = " << points.size() << std::endl;
-    timeNeighbors<float>(points, rounds, R, L, delta, alpha, oFile);
+    parlay::sequence<Tvec_point<float>> queries;
+    if(qFile != NULL){ 
+      queries = parse_fvecs(qFile);
+      std::cout << "Parsed queries, len = " << queries.size() << std::endl;
+    }
+    timeNeighbors<float>(points, rounds, R, L, alpha, delta, k, Q, queries, oFile);
   } else {  // vectors are uint8 coordinates
-    parlay::sequence<Tvec_point<uint8_t>> points = parse_bvecs(iFile, maxDeg);
-    timeNeighbors<uint8_t>(points, rounds, R, L, delta, alpha, oFile);
+    parlay::sequence<Tvec_point<uint8_t>> points = parse_bvecs(iFile);
+    parlay::sequence<Tvec_point<uint8_t>> queries;
+    if(qFile != NULL) queries = parse_bvecs(qFile);
+    timeNeighbors<uint8_t>(points, rounds, R, L, alpha, delta, k, Q, queries, oFile);
   }
 }

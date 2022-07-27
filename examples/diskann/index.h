@@ -19,7 +19,7 @@ struct knn_index {
   size_t maxDeg;
   size_t beamSize;
   // TODO: rename? are we using round 2?
-  double r2_alpha;  // alpha parameter for round 2 of robustPrune
+  double alpha;  // alpha parameter for round 2 of robustPrune
   size_t d;
 
   struct empty_weight {};
@@ -42,8 +42,8 @@ struct knn_index {
   using slice_idx = decltype(make_slice(parlay::sequence<index_pair>()));
   using fine_sequence = parlay::sequence<int>;
 
-  knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize, double alpha, size_t dim)
-      : v(v), maxDeg(maxDeg), beamSize(beamSize), r2_alpha(alpha), d(dim) {
+  knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize, double Alpha, size_t dim)
+      : v(v), maxDeg(maxDeg), beamSize(beamSize), alpha(Alpha), d(dim) {
     std::cout << "Initialized knn_index with maxDeg = " << maxDeg << " beamSize = " << beamSize << " alpha = " << alpha << " dim = " << dim << std::endl;
   }
 
@@ -288,7 +288,7 @@ struct knn_index {
         auto new_nghs =
             parlay::make_slice(new_out.begin() + maxDeg * (i - floor),
                                new_out.begin() + maxDeg * (i + 1 - floor));
-        robustPrune(v[index], index, visited, r2_alpha, new_nghs);
+        robustPrune(v[index], index, visited, alpha, new_nghs);
       });
       std::cout << "Finished search" << std::endl;
       // New neighbors of each point written into new_nbhs (above).
@@ -368,7 +368,7 @@ struct knn_index {
          parlay::sequence<int> new_out_2(maxDeg, -1);
          auto output_slice =
              parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-         robustPrune(v[index], index, candidates, r2_alpha, output_slice);
+         robustPrune(v[index], index, candidates, alpha, output_slice);
          size_t deg = size_of(output_slice);
          auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
          auto tree = edge_tree(begin, begin + deg);
