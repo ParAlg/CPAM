@@ -367,7 +367,7 @@ struct symmetric_graph {
     };
     parlay::sort_inplace(E_slice, key_less);
 
-    auto combine_op = [&] (edge_node* cur, edge_node* inc) {
+    auto combine_op = [&] (edge_node* inc, edge_node* cur) {
       edge_tree t;
       t.root = cur;  // Lets the ref-cnt get decremented here.
       return inc;

@@ -68,7 +68,7 @@ struct knn_index {
       std::cout << "Neighbor = " << v << std::endl;
       return true;
     };
-    auto m = G.get_vertex(medoid_id);
+    auto m = G.get_vertex(medoid->id);
     std::cout << "Medoid's neighbors: " << std::endl;
     m.out_neighbors().foreach_cond(print_fn);
 
@@ -258,13 +258,6 @@ struct knn_index {
 
   void batch_insert(parlay::sequence<int>& inserts, double base = 2,
                     double max_fraction = .02, bool random_order = true) {
-    //    for (int p : inserts) {
-    //      if (p < 0 || p > (int)v.size()) {
-    //        std::cout << "ERROR: invalid or already inserted point " << p
-    //                  << " given to batch_insert" << std::endl;
-    //        abort();
-    //      }
-    //    }
     std::cout << "here" << std::endl;
 
     size_t n = v.size();
@@ -312,7 +305,6 @@ struct knn_index {
                                new_out.begin() + maxDeg * (i + 1 - floor));
         robustPrune(v[index], index, visited, alpha, new_nghs);
       });
-      std::cout << "Finished search" << std::endl;
       // New neighbors of each point written into new_nbhs (above).
       // Not yet added to the graph G.
 
@@ -330,16 +322,6 @@ struct knn_index {
         });
         return edges;
       });
-
-      //       std::cout << "Edges being considered this round:" << std::endl;
-      //       for (size_t i=0; i<to_flatten.size(); ++i) {
-      //         auto& edges = to_flatten[i];
-      //         for (size_t j=0; j<edges.size(); ++j) {
-      //           std::cout << edges[j].first << " " << edges[j].second <<
-      //           std::endl;
-      //         }
-      //       }
-      //       std::cout << "Done:" << std::endl;
 
       auto KVs = parlay::tabulate(ceiling - floor, [&](size_t i) {
         node_id index = shuffled_inserts[i + floor];
@@ -360,31 +342,15 @@ struct knn_index {
       G.insert_vertices_batch(KVs.size(), KVs.begin());
       std::cout << "After inserts, G.num_vertices() (max node_id) = "
                 << G.num_vertices() << std::endl;
-      ;
-
-      //       for (size_t i=0; i<std::min(KVs.size(), (size_t)100); ++i) {
-      //         auto [id, edges] = KVs[i];
-      //         std::cout << "id = " << id << std::endl;
-      //         edge_tree t;
-      //         t.root = edges;
-      //         std::cout << "ngh size = " << t.size() << std::endl;
-      //         t.root = nullptr;
-      //       }
 
       // TODO: update the code below:
       auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
       auto reverse_KVs =
           parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
 
-      //       auto print_fn = [&] (const auto& et) -> bool {
-      //         std::cout << "Neighbor = " << std::get<0>(et) << std::endl;
-      //         return true;
-      //       };
-
       // finally, add the bidirectional edges; if they do not make
       // the vertex exceed the degree bound, just add them to out_nbhs;
       // otherwise, use robustPrune on the vertex with user-specified alpha
-      std::cout << "here4" << std::endl;
       parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
         auto[index, candidates] = grouped_by[j];
         // TODO: simpler case when newsize <= maxDeg.
@@ -395,43 +361,13 @@ struct knn_index {
         size_t deg = size_of(output_slice);
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
-        //         std::cout << "For id = " << index << " new_tree size = " <<
-        //         tree.size() << " candidates size = " << candidates.size() <<
-        //         std::endl;
         reverse_KVs[j] = {index, tree.root};
         tree.root = nullptr;
       });
 
       std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
-
-      //       for (size_t i=0; i<std::min(reverse_KVs.size(), (size_t)100);
-      //       ++i) {
-      //         auto [id, edges] = reverse_KVs[i];
-      //         std::cout << "id = " << id << std::endl;
-      //         edge_tree t;
-      //         t.root = edges;
-      //         std::cout << "ngh size = " << t.size() << std::endl;
-      //         t.root = nullptr;
-      //
-      ////         auto f = [&] (node_id u, node_id v, empty_weight wgh) {
-      ////           std::cout << u << " " << v << std::endl;
-      ////           return true;
-      ////         };
-      ////
-      ////         std::cout << "New neighbors = " << std::endl;
-      ////         t.foreach_cond(t, print_fn);
-      ////
-      ////         t.root = nullptr;
-      ////         std::cout << "Current neighbors = " << std::endl;
-      ////         G.get_vertex(id).out_neighbors().foreach_cond(f);
-      //       }
-
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
-      std::cout << "here5" << std::endl;
-      //      if (inc == 3) {
-      //        exit(0);
-      //      }
       inc += 1;
     }
   }
@@ -510,11 +446,13 @@ struct knn_index {
       return parlay::hash32(i) % n;
     });
     std::vector<int> ks = {1, 2, 4, 8, 16, 32, 64, 128, 256};
-    parlay::sequence<std::vector<int>> counts(num_samples);
+    auto counts = parlay::sequence<std::vector<int>>::from_function(num_samples,
+        [&] (size_t i) { return std::vector<int>(ks.size()); });
     parlay::parallel_for(0, num_samples, [&](size_t i) {
       auto sample_id = ids[i];
       auto ground_truth_nn = all_distances_sorted(sample_id);
-      for (int k : ks) {
+      for (size_t j=0; j<ks.size(); ++j) {
+        size_t k = ks[j];
         auto neighbors = query(v[sample_id]->coordinates.begin(), k,
                                std::max((size_t)(2 * k + 1), (size_t)maxDeg));
         auto tab =
@@ -523,12 +461,13 @@ struct knn_index {
         for (auto ngh : neighbors) {
           if (tab.find(ngh) != tab.end()) ++hits;
         }
-        counts[i].push_back(hits);
+        counts[i][j] = hits;
       }
     });
-    for (auto k : ks) {
+    for (size_t j=0; j<ks.size(); ++j) {
+      size_t k = ks[j];
       auto ds = parlay::delayed_seq<size_t>(
-          num_samples, [&](size_t i) { return counts[i][k]; });
+          num_samples, [&](size_t i) { return counts[i][j]; });
       auto tot = parlay::reduce(ds);
       std::cout << k << "@" << k << ": "
                 << (static_cast<double>(tot) / (k * num_samples)) << std::endl;
