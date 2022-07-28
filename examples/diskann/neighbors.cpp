@@ -32,6 +32,10 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
     I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+    I.lazy_delete(0);
+    parlay::sequence<node_id> deletes;
+    deletes.push_back(1);
+    deletes.push_back(2);
   };
 }
 

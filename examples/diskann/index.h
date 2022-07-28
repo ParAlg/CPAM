@@ -40,7 +40,6 @@ struct knn_index {
   using slice_tvec = decltype(make_slice(parlay::sequence<tvec_point*>()));
   using index_pair = std::pair<int, int>;
   using slice_idx = decltype(make_slice(parlay::sequence<index_pair>()));
-  using fine_sequence = parlay::sequence<int>;
 
   knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize,
             double Alpha, size_t dim)
@@ -91,7 +90,36 @@ struct knn_index {
     return neighbors;
   }
 
+  void lazy_delete(parlay::sequence<node_id> deletes){
+		for(int p : deletes){
+			if(p < 0 || p > (node_id) v.size() ){
+				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
+				abort();
+			}
+			if(p != medoid->id) delete_set.insert(p);
+			else std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
+		} 
+	}
+
+	void lazy_delete(node_id p){
+		if(p < 0 || p > (node_id) v.size()){
+			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
+			abort();
+		}
+		if(p == (node_id) medoid->id){
+			std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
+			return;
+		} 
+		delete_set.insert(p);
+	}
+
+  // void consolidate_deletes(){
+
+  // }
+
  private:
+
+  std::set<int> delete_set;
   // p_coords: query vector coordinates
   // v: database of vectors
   // medoid: "root" of the proximity graph
@@ -196,7 +224,7 @@ struct knn_index {
     auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
 
-    fine_sequence new_nbhs = fine_sequence();
+    parlay::sequence<int> new_nbhs = parlay::sequence<int>();
 
     size_t candidate_idx = 0;
     while (new_nbhs.size() <= maxDeg && candidate_idx < candidates.size()) {
