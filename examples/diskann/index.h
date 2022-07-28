@@ -11,6 +11,8 @@
 #include "util/NSGDist.h"
 #include "util/distance.h"
 
+bool stats = false;
+
 template <typename T>
 struct knn_index {
   // Pointers to the coordinates for each point.
@@ -63,15 +65,17 @@ struct knn_index {
     // Self-recall and query recall being different is an indicator
     // of distribution shift.
 
-    auto print_fn = [&](node_id u, node_id v, empty_weight wgh) -> bool {
-      std::cout << "Neighbor = " << v << std::endl;
-      return true;
-    };
-    auto m = G.get_vertex(medoid->id);
-    std::cout << "Medoid's neighbors: " << std::endl;
-    m.out_neighbors().foreach_cond(print_fn);
+    if (stats) {
+      auto print_fn = [&](node_id u, node_id v, empty_weight wgh) -> bool {
+        std::cout << "Neighbor = " << v << std::endl;
+        return true;
+      };
+      auto m = G.get_vertex(medoid->id);
+      std::cout << "Medoid's neighbors: " << std::endl;
+      m.out_neighbors().foreach_cond(print_fn);
 
-    compute_self_recall();
+      compute_self_recall();
+    }
   }
 
   parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
@@ -90,35 +94,38 @@ struct knn_index {
     return neighbors;
   }
 
-  void lazy_delete(parlay::sequence<node_id> deletes){
-		for(int p : deletes){
-			if(p < 0 || p > (node_id) v.size() ){
-				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-				abort();
-			}
-			if(p != medoid->id) delete_set.insert(p);
-			else std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-		} 
-	}
+  void lazy_delete(parlay::sequence<node_id> deletes) {
+    for (int p : deletes) {
+      if (p < 0 || p > (node_id)v.size()) {
+        std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                  << std::endl;
+        abort();
+      }
+      if (p != medoid->id)
+        delete_set.insert(p);
+      else
+        std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+    }
+  }
 
-	void lazy_delete(node_id p){
-		if(p < 0 || p > (node_id) v.size()){
-			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-			abort();
-		}
-		if(p == (node_id) medoid->id){
-			std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-			return;
-		} 
-		delete_set.insert(p);
-	}
+  void lazy_delete(node_id p) {
+    if (p < 0 || p > (node_id)v.size()) {
+      std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                << std::endl;
+      abort();
+    }
+    if (p == (node_id)medoid->id) {
+      std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+      return;
+    }
+    delete_set.insert(p);
+  }
 
   // void consolidate_deletes(){
 
   // }
 
  private:
-
   std::set<int> delete_set;
   // p_coords: query vector coordinates
   // v: database of vectors
@@ -474,12 +481,12 @@ struct knn_index {
       return parlay::hash32(i) % n;
     });
     std::vector<int> ks = {1, 2, 4, 8, 16, 32, 64, 128, 256};
-    auto counts = parlay::sequence<std::vector<int>>::from_function(num_samples,
-        [&] (size_t i) { return std::vector<int>(ks.size()); });
+    auto counts = parlay::sequence<std::vector<int>>::from_function(
+        num_samples, [&](size_t i) { return std::vector<int>(ks.size()); });
     parlay::parallel_for(0, num_samples, [&](size_t i) {
       auto sample_id = ids[i];
       auto ground_truth_nn = all_distances_sorted(sample_id);
-      for (size_t j=0; j<ks.size(); ++j) {
+      for (size_t j = 0; j < ks.size(); ++j) {
         size_t k = ks[j];
         auto neighbors = query(v[sample_id]->coordinates.begin(), k,
                                std::max((size_t)(2 * k + 1), (size_t)maxDeg));
@@ -492,7 +499,7 @@ struct knn_index {
         counts[i][j] = hits;
       }
     });
-    for (size_t j=0; j<ks.size(); ++j) {
+    for (size_t j = 0; j < ks.size(); ++j) {
       size_t k = ks[j];
       auto ds = parlay::delayed_seq<size_t>(
           num_samples, [&](size_t i) { return counts[i][j]; });
