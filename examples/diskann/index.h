@@ -221,8 +221,12 @@ struct knn_index {
 
     // TODO: Is this snippet correct? Do we care bout duplicates?
     if (candidates.size() <= maxDeg) {
+      uint32_t offset = 0;
       for (size_t i = 0; i < candidates.size(); ++i) {
-        new_nghs[i] = candidates[i].first;
+        if(candidates[i].first==p_id)
+          offset++; // increase `offset` as well when doing de-duplication
+        else
+          new_nghs[i-offset] = candidates[i].first;
       }
       return;
     }
