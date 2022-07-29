@@ -155,7 +155,7 @@ struct knn_index {
       return std::pair{q, dist};
     };
     int bits = std::ceil(std::log2(beamSize * beamSize));
-    parlay::sequence<node_id> hash_table(1 << bits, -1);
+    parlay::sequence<node_id> hash_table(1 << bits, std::numeric_limits<node_id>::max());
 
     // the frontier starts with the medoid
     frontier.push_back(make_pid(medoid->id));
