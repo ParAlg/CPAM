@@ -314,9 +314,7 @@ struct knn_index {
 
     size_t n = v.size();
     size_t m = inserts.size();
-    size_t inc = 0;
-    size_t count = 0;
-    size_t max_batch_size = static_cast<size_t>(max_fraction * n);
+    size_t max_batch_size = static_cast<size_t>(std::ceil(max_fraction * n));
     parlay::sequence<node_id> rperm;
     if (random_order)
       rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m),
@@ -327,18 +325,12 @@ struct knn_index {
         parlay::tabulate(m, [&](size_t i) { return inserts[rperm[i]]; });
     std::cout << "here1" << std::endl;
 
-    size_t floor;
-    size_t ceiling;
-    while (count < m) {
-      if (pow(base, inc) <= max_batch_size) {
-        floor = static_cast<size_t>(pow(base, inc)) - 1;
-        ceiling = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
-        count = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
-      } else {
-        floor = count;
-        ceiling = std::min(count + static_cast<size_t>(max_batch_size), m);
-        count += static_cast<size_t>(max_batch_size);
-      }
+    size_t floor=0, ceiling=0;
+    uint32_t cnt_batch = 0;
+    while(ceiling<m) {
+      cnt_batch++;
+      floor = ceiling;
+      ceiling = std::min({m, size_t(floor*base)+1, floor+max_batch_size});
 
       std::cout << "Start of batch insertion round: ceiling = " << ceiling
                 << " floor = " << floor << std::endl;
@@ -390,7 +382,7 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
-      std::cout << "Number of vertex insertions for batch: " << inc << " : "
+      std::cout << "Number of vertex insertions for batch: " << cnt_batch << " : "
                 << KVs.size() << std::endl;
       G.insert_vertices_batch(KVs.size(), KVs.begin());
       std::cout << "After inserts, G.num_vertices() (max node_id) = "
@@ -422,7 +414,6 @@ struct knn_index {
       std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
-      inc += 1;
     }
   }
 
