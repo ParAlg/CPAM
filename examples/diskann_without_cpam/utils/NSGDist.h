@@ -12,8 +12,10 @@
 #include <math.h>
 #include "parlay/parallel.h"
 #include "parlay/primitives.h"
+#include "counter.h"
 //#include "common/geometry.h"
 
+atomic_sum_counter<size_t> distance_calls;
 
 namespace efanna2e{
   enum Metric{
@@ -331,11 +333,12 @@ namespace efanna2e{
   };
 }
 
-
-
 float distance(uint8_t *p, uint8_t *q, unsigned d){
+#ifdef STATS
+  distance_calls.update_value(1);
+#endif
   float result = 0;
-  for(int i=0; i<d; i++){
+  for(unsigned i=0; i<d; i++){
     result += ((int32_t)((int16_t) q[i] - (int16_t) p[i])) *
                   ((int32_t)((int16_t) q[i] - (int16_t) p[i]));
   }
@@ -343,8 +346,11 @@ float distance(uint8_t *p, uint8_t *q, unsigned d){
 }
 
 float distance(float *q, uint8_t *p, unsigned d){
+#ifdef STATS
+  distance_calls.update_value(1);
+#endif
   float result = 0;
-  for(int i=0; i<d; i++){
+  for(unsigned i=0; i<d; i++){
     result += (q[i] - (float) p[i]) *
                   (q[i] - (float) p[i]);
   }
@@ -352,6 +358,9 @@ float distance(float *q, uint8_t *p, unsigned d){
 }
 
 float distance(float *p, float *q, unsigned d){
+#ifdef STATS
+    distance_calls.update_value(1);
+#endif
     efanna2e::DistanceL2 distfunc;
     return distfunc.compare(p, q, d);
 }

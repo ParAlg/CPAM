@@ -33,14 +33,13 @@
 
 extern bool report_stats;
 
-
 template<typename T>
 struct knn_index{
 	int maxDeg;
 	int beamSize;
 	double r2_alpha; //alpha parameter for round 2 of robustPrune
 	unsigned d;
-	std::set<int> delete_set; 
+	std::set<int> delete_set;
 	using tvec_point = Tvec_point<T>;
 	using fvec_point = Tvec_point<float>;
 	tvec_point* medoid;
@@ -123,7 +122,7 @@ struct knn_index{
 					distance(v[p->out_nbh[i]]->coordinates.begin(), p->coordinates.begin(), d)));
 			}
     }
-		
+
 
 		// Sort the candidate set in reverse order according to distance from p.
 		auto less = [&] (pid a, pid b) {return a.second < b.second;};
@@ -158,7 +157,7 @@ struct knn_index{
 	}
 
 
-	//wrapper to allow calling robustPrune on a sequence of candidates 
+	//wrapper to allow calling robustPrune on a sequence of candidates
 	//that do not come with precomputed distances
 	void robustPrune(Tvec_point<T>* p, parlay::sequence<int> candidates, parlay::sequence<Tvec_point<T>*> &v, double alpha, bool add = true){
     parlay::sequence<pid> cc;
@@ -177,7 +176,7 @@ struct knn_index{
 		// build_index_inner(v, r2_alpha, 2, .02);
 	}
 
-	//executes the index build routine from the DiskANN paper 
+	//executes the index build routine from the DiskANN paper
 	//uses batches and synchronization to avoid locks
 	//alpha is the alpha value for the RobustPrune routine
 	//base is the exponent base for the batch doubling
@@ -233,7 +232,7 @@ struct knn_index{
 				} else{
 					parlay::sequence<int> new_out_2(maxDeg, -1);
 					v[index]->new_nbh=parlay::make_slice(new_out_2.begin(), new_out_2.begin()+maxDeg);
-					robustPrune(v[index], candidates, v, alpha);  
+					robustPrune(v[index], candidates, v, alpha);
 					synchronize(v[index]);
 				}
 			});
@@ -244,23 +243,23 @@ struct knn_index{
 	void lazy_delete(parlay::sequence<int> deletes, parlay::sequence<Tvec_point<T>*> &v){
 		for(int p : deletes){
 			if(p < 0 || p > (int) v.size() ){
-				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
+				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl;
 				abort();
 			}
 			if(p != medoid->id) delete_set.insert(p);
-			else std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-		} 
+			else std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+		}
 	}
 
 	void lazy_delete(int p, parlay::sequence<Tvec_point<T>*> &v){
 		if(p < 0 || p > (int) v.size()){
-			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
+			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl;
 			abort();
 		}
 		if(p == medoid->id){
-			std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
+			std::cout << "Deleting medoid not permitted; continuing" << std::endl;
 			return;
-		} 
+		}
 		delete_set.insert(p);
 	}
 
@@ -269,11 +268,11 @@ struct knn_index{
 
 		parlay::parallel_for(0, v.size(), [&] (size_t i){
 			if(delete_set.find(i) != delete_set.end()){
-				parlay::sequence<int> new_edges; 
+				parlay::sequence<int> new_edges;
 				for(int j=0; j<size_of(v[i]->out_nbh); j++){
 					if(delete_set.find(v[i]->out_nbh[j]) == delete_set.end()) new_edges.push_back(v[i]->out_nbh[j]);
 				}
-				if(new_edges.size() < size_of(v[i]->out_nbh)) add_out_nbh(new_edges, v[i]); 
+				if(new_edges.size() < size_of(v[i]->out_nbh)) add_out_nbh(new_edges, v[i]);
 			}
 		});
 
@@ -292,7 +291,7 @@ struct knn_index{
 				}
 				//TODO only prune if overflow happens
 				//TODO modify in separate step with new memory initialized in one block
-				if(modify){ 
+				if(modify){
 					parlay::sequence<int> candidates;
 					for(int j : new_edges) candidates.push_back(j);
 					parlay::sequence<int> new_neighbors(maxDeg, -1);
@@ -300,15 +299,15 @@ struct knn_index{
 					robustPrune(v[i], candidates, v, r2_alpha, false);
 					synchronize(v[i]);
 				}
-				
-			} 
+
+			}
 		});
 		parlay::parallel_for(0, v.size(), [&] (size_t i){
 			if(delete_set.find(i) != delete_set.end()){
 				clear(v[i]);
-			} 
+			}
 		});
- 
+
 		delete_set.clear();
 
 	}
@@ -321,7 +320,7 @@ struct knn_index{
 				abort();
 			}
 		}
-		// std::cout << "here" << std::endl; 
+		// std::cout << "here" << std::endl;
 		size_t n = v.size();
 		size_t m = inserts.size();
 		size_t inc = 0;
@@ -331,7 +330,7 @@ struct knn_index{
 		if(random_order) rperm = parlay::random_permutation<int>(static_cast<int>(m), time(NULL));
 		else rperm = parlay::tabulate(m, [&] (int i) {return i;});
 		auto shuffled_inserts = parlay::tabulate(m, [&] (size_t i) {return inserts[rperm[i]];});
-		// std::cout << "here1" << std::endl; 
+		// std::cout << "here1" << std::endl;
 		while(count < m){
 			size_t floor;
 			size_t ceiling;
@@ -339,19 +338,19 @@ struct knn_index{
 				floor = static_cast<size_t>(pow(base, inc))-1;
 				ceiling = std::min(static_cast<size_t>(pow(base, inc+1)), m)-1;
 				count = std::min(static_cast<size_t>(pow(base, inc+1)), m)-1;
-				// std::cout << "here2" << std::endl; 
+				// std::cout << "here2" << std::endl;
 			} else{
 				floor = count;
 				ceiling = std::min(count + static_cast<size_t>(max_batch_size), m)-1;
 				count += static_cast<size_t>(max_batch_size);
 			}
-			// std::cout << "here3" << std::endl; 
+			// std::cout << "here3" << std::endl;
 			// std::cout << ceiling << std::endl;
-			// std::cout << floor << std::endl; 
+			// std::cout << floor << std::endl;
 			parlay::sequence<int> new_out = parlay::sequence<int>(maxDeg*(ceiling-floor), -1);
 			//search for each node starting from the medoid, then call
 			//robustPrune with the visited list as its candidate set
-			// std::cout << "here2" << std::endl; 
+			// std::cout << "here2" << std::endl;
 			parlay::parallel_for(floor, ceiling, [&] (size_t i){
 				size_t index = shuffled_inserts[i];
 				v[index]->new_nbh = parlay::make_slice(new_out.begin()+maxDeg*(i-floor), new_out.begin()+maxDeg*(i+1-floor));
@@ -361,7 +360,7 @@ struct knn_index{
 			});
 			//make each edge bidirectional by first adding each new edge
 			//(i,j) to a sequence, then semisorting the sequence by key values
-			// std::cout << "here3" << std::endl; 
+			// std::cout << "here3" << std::endl;
 			auto to_flatten = parlay::tabulate(ceiling-floor, [&] (size_t i){
 				int index = shuffled_inserts[i+floor];
 				auto edges = parlay::tabulate(size_of(v[index]->new_nbh), [&] (size_t j){
@@ -374,7 +373,7 @@ struct knn_index{
 			//finally, add the bidirectional edges; if they do not make
 			//the vertex exceed the degree bound, just add them to out_nbhs;
 			//otherwise, use robustPrune on the vertex with user-specified alpha
-			// std::cout << "here4" << std::endl; 
+			// std::cout << "here4" << std::endl;
 			parlay::parallel_for(0, grouped_by.size(), [&] (size_t j){
 				auto [index, candidates] = grouped_by[j];
 				int newsize = candidates.size() + size_of(v[index]->out_nbh);
@@ -383,11 +382,11 @@ struct knn_index{
 				} else{
 					parlay::sequence<int> new_out_2(maxDeg, -1);
 					v[index]->new_nbh=parlay::make_slice(new_out_2.begin(), new_out_2.begin()+maxDeg);
-					robustPrune(v[index], candidates, v, r2_alpha);  
+					robustPrune(v[index], candidates, v, r2_alpha);
 					synchronize(v[index]);
 				}
 			});
-			// std::cout << "here5" << std::endl; 
+			// std::cout << "here5" << std::endl;
 			inc += 1;
 		}
 	}
@@ -402,14 +401,14 @@ struct knn_index{
 		parlay::parallel_for(0, v.size(), [&] (size_t i){
       if(v[i]->id > 1000000 && v[i]->id != medoid->id){
       	if(size_of(v[i]->out_nbh) != 0) {
-      		std::cout << "ERROR : deleted point " << i << " still in graph" << std::endl; 
+      		std::cout << "ERROR : deleted point " << i << " still in graph" << std::endl;
       		abort();
       	}
       }else{
       	for(int j=0; j<size_of(v[i]->out_nbh); j++){
       		int nbh = v[i]->out_nbh[j];
       		if(nbh > 1000000 && nbh != medoid->id){
-      			std::cout << "ERROR : point " << i << " contains deleted neighbor " << nbh << std::endl; 
+      			std::cout << "ERROR : point " << i << " contains deleted neighbor " << nbh << std::endl;
       			abort();
       		}
       	}

@@ -9,8 +9,8 @@
 #include "../graphs/aspen/aspen.h"
 #include "types.h"
 #include "util/NSGDist.h"
-#include "util/distance.h"
 #include "util/counter.h"
+#include "util/distance.h"
 
 bool stats = false;
 
@@ -21,8 +21,7 @@ struct knn_index {
 
   size_t maxDeg;
   size_t beamSize;
-  // TODO: rename? are we using round 2?
-  double alpha;  // alpha parameter for round 2 of robustPrune
+  double alpha;
   size_t d;
 
   atomic_sum_counter<size_t> total_visited;
@@ -64,8 +63,10 @@ struct knn_index {
     std::cout << "G.num_vertices = " << G.num_vertices()
               << " num_edges = " << G.num_edges() << std::endl;
 #ifdef STATS
-    std::cout << "Total vertices visited: " << total_visited.get_value() << std::endl;
-    std::cout << "Total distance calls: " << distance_calls.get_value() << std::endl;
+    std::cout << "Total vertices visited: " << total_visited.get_value()
+              << std::endl;
+    std::cout << "Total distance calls: " << distance_calls.get_value()
+              << std::endl;
 #endif
 
     // compute "self-recall", i.e. recall from base points.
@@ -101,35 +102,38 @@ struct knn_index {
     return neighbors;
   }
 
-  void lazy_delete(parlay::sequence<node_id> deletes){
-		for(node_id p : deletes){
-			if(p < 0 || p > (node_id) v.size() ){
-				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-				abort();
-			}
-			if(p != medoid->id) delete_set.insert(p);
-			else std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-		} 
-	}
+  void lazy_delete(parlay::sequence<node_id> deletes) {
+    for (node_id p : deletes) {
+      if (p < 0 || p > (node_id)v.size()) {
+        std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                  << std::endl;
+        abort();
+      }
+      if (p != medoid->id)
+        delete_set.insert(p);
+      else
+        std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+    }
+  }
 
-	void lazy_delete(node_id p){
-		if(p < 0 || p > (node_id) v.size()){
-			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-			abort();
-		}
-		if(p == (node_id) medoid->id){
-			std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-			return;
-		} 
-		delete_set.insert(p);
-	}
+  void lazy_delete(node_id p) {
+    if (p < 0 || p > (node_id)v.size()) {
+      std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                << std::endl;
+      abort();
+    }
+    if (p == (node_id)medoid->id) {
+      std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+      return;
+    }
+    delete_set.insert(p);
+  }
 
   // void consolidate_deletes(){
 
   // }
 
  private:
-
   std::set<node_id> delete_set;
   // p_coords: query vector coordinates
   // v: database of vectors
@@ -213,7 +217,8 @@ struct knn_index {
   // The new candidate set is added to the supplied array (new_nghs).
   void robustPrune(tvec_point* p, node_id p_id,
                    parlay::sequence<pid> candidates, double alpha,
-                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
+                   parlay::slice<node_id*, node_id*> new_nghs,
+                   bool add = true) {
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
@@ -230,10 +235,10 @@ struct knn_index {
     if (candidates.size() <= maxDeg) {
       uint32_t offset = 0;
       for (size_t i = 0; i < candidates.size(); ++i) {
-        if(candidates[i].first==p_id)
-          offset++; // increase `offset` as well when doing de-duplication
+        if (candidates[i].first == p_id)
+          offset++;  // increase `offset` as well when doing de-duplication
         else
-          new_nghs[i-offset] = candidates[i].first;
+          new_nghs[i - offset] = candidates[i].first;
       }
       return;
     }
@@ -276,7 +281,8 @@ struct knn_index {
   // that do not come with precomputed distances
   void robustPrune(Tvec_point<T>* p, node_id p_id,
                    parlay::sequence<node_id>& candidates, double alpha,
-                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
+                   parlay::slice<node_id*, node_id*> new_nghs,
+                   bool add = true) {
     parlay::sequence<pid> cc;
     auto p_vertex = G.get_vertex(p_id);
     node_id p_ngh_size = p_vertex.out_degree();
@@ -313,7 +319,8 @@ struct knn_index {
     size_t max_batch_size = static_cast<size_t>(max_fraction * n);
     parlay::sequence<node_id> rperm;
     if (random_order)
-      rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m), time(NULL));
+      rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m),
+                                                  time(NULL));
     else
       rperm = parlay::tabulate(m, [&](node_id i) { return i; });
     auto shuffled_inserts =
@@ -336,8 +343,8 @@ struct knn_index {
       std::cout << "Start of batch insertion round: ceiling = " << ceiling
                 << " floor = " << floor << std::endl;
 
-      parlay::sequence<node_id> new_out =
-          parlay::sequence<node_id>(maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
+      parlay::sequence<node_id> new_out = parlay::sequence<node_id>(
+          maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
 
       // search for each node starting from the medoid, then call
       // robustPrune with the visited list as its candidate set
@@ -400,7 +407,8 @@ struct knn_index {
       parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
         auto[index, candidates] = grouped_by[j];
         // TODO: simpler case when newsize <= maxDeg.
-        parlay::sequence<node_id> new_out_2(maxDeg, std::numeric_limits<node_id>::max());
+        parlay::sequence<node_id> new_out_2(
+            maxDeg, std::numeric_limits<node_id>::max());
         auto output_slice =
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
         robustPrune(v[index], index, candidates, alpha, output_slice);
