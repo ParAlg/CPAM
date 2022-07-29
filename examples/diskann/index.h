@@ -247,10 +247,10 @@ struct knn_index {
     auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
 
-    parlay::sequence<node_id> new_nbhs = parlay::sequence<node_id>();
+    size_t num_new = 0;
 
     size_t candidate_idx = 0;
-    while (new_nbhs.size() <= maxDeg && candidate_idx < candidates.size()) {
+    while (num_new <= maxDeg && candidate_idx < candidates.size()) {
       // Don't need to do modifications.
       node_id p_star = candidates[candidate_idx].first;
       candidate_idx++;
@@ -258,7 +258,8 @@ struct knn_index {
         continue;
       }
 
-      new_nbhs.push_back(p_star);
+      new_nghs[num_new] = p_star;
+      num_new++;
 
       for (size_t i = candidate_idx; i < candidates.size(); i++) {
         node_id p_prime = candidates[i].first;
@@ -271,9 +272,6 @@ struct knn_index {
           }
         }
       }
-    }
-    for (size_t i = 0; i < new_nbhs.size(); ++i) {
-      new_nghs[i] = new_nbhs[i];  // change names
     }
   }
 
