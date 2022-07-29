@@ -219,6 +219,8 @@ struct knn_index {
                    parlay::sequence<pid> candidates, double alpha,
                    parlay::slice<node_id*, node_id*> new_nghs,
                    bool add = true) {
+    auto less = [&](pid a, pid b) { return a.second < b.second; };
+
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
@@ -231,20 +233,20 @@ struct knn_index {
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
 
-    // TODO: Is this snippet correct? Do we care bout duplicates?
     if (candidates.size() <= maxDeg) {
       uint32_t offset = 0;
-      for (size_t i = 0; i < candidates.size(); ++i) {
-        if (candidates[i].first == p_id)
-          offset++;  // increase `offset` as well when doing de-duplication
-        else
-          new_nghs[i - offset] = candidates[i].first;
+      parlay::sort_inplace(candidates, less);
+      for (size_t i=0; i<candidates.size(); ++i) {
+        node_id ngh = candidates[i].first;
+        if (ngh != p_id && (i == 0 || ngh != candidates[i-1].first)) {
+          new_nghs[offset] = ngh;
+          offset++;
+        }
       }
       return;
     }
 
     // Sort the candidate set in reverse order according to distance from p.
-    auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
 
     size_t num_new = 0;
