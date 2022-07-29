@@ -31,7 +31,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
     std::cout << "alpha" << alpha << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
-    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<node_id>(i);}));
     I.lazy_delete(0);
     parlay::sequence<node_id> deletes;
     deletes.push_back(1);
@@ -48,7 +48,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
     std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
-    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<node_id>(i);}));
 
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;

@@ -36,10 +36,8 @@ struct knn_index {
 
   tvec_point* medoid;
 
-  using pid = std::pair<int, float>;
+  using pid = std::pair<node_id, float>;
   using slice_tvec = decltype(make_slice(parlay::sequence<tvec_point*>()));
-  using index_pair = std::pair<int, int>;
-  using slice_idx = decltype(make_slice(parlay::sequence<index_pair>()));
 
   knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize,
             double Alpha, size_t dim)
@@ -49,7 +47,7 @@ struct knn_index {
               << " dim = " << dim << std::endl;
   }
 
-  void build_index(parlay::sequence<int> inserts) {
+  void build_index(parlay::sequence<node_id> inserts) {
     // Find the medoid, which each beamSearch will begin from.
     node_id medoid_id = find_approx_medoid();
     std::cout << "medoid coordinates = " << medoid->coordinates.begin()
@@ -91,7 +89,7 @@ struct knn_index {
   }
 
   void lazy_delete(parlay::sequence<node_id> deletes){
-		for(int p : deletes){
+		for(node_id p : deletes){
 			if(p < 0 || p > (node_id) v.size() ){
 				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
 				abort();
@@ -119,7 +117,7 @@ struct knn_index {
 
  private:
 
-  std::set<int> delete_set;
+  std::set<node_id> delete_set;
   // p_coords: query vector coordinates
   // v: database of vectors
   // medoid: "root" of the proximity graph
@@ -128,19 +126,19 @@ struct knn_index {
   std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
       T* p_coords, int beamSize) {
     // initialize data structures
-    // pid = std::pair<int, float>
+    // pid = std::pair<node_id, float>
     std::vector<pid> visited;
     parlay::sequence<pid> frontier;
     auto less = [&](pid a, pid b) {
       return a.second < b.second || (a.second == b.second && a.first < b.first);
     };
-    auto make_pid = [&](int q) -> std::pair<int, double> {
+    auto make_pid = [&](node_id q) -> std::pair<node_id, double> {
       // Search for q in G.
       auto dist = distance(v[q]->coordinates.begin(), p_coords, d);
       return std::pair{q, dist};
     };
     int bits = std::ceil(std::log2(beamSize * beamSize));
-    parlay::sequence<int> hash_table(1 << bits, -1);
+    parlay::sequence<node_id> hash_table(1 << bits, -1);
 
     // the frontier starts with the medoid
     frontier.push_back(make_pid(medoid->id));
@@ -157,15 +155,15 @@ struct knn_index {
       pid currentPid = unvisited_frontier[0];
       auto current_vtx = G.get_vertex(currentPid.first);
 
-      auto g = [&](int a) {
-        int loc = parlay::hash64_2(a) & ((1 << bits) - 1);
+      auto g = [&](node_id a) {
+        node_id loc = parlay::hash64_2(a) & ((1 << bits) - 1);
         if (hash_table[loc] == a) return false;
         hash_table[loc] = a;
         return true;
       };
 
       // TODO: reserve?
-      parlay::sequence<int> candidates;
+      parlay::sequence<node_id> candidates;
       auto f = [&](node_id u, node_id v, empty_weight wgh) {
         if (g(v)) {
           candidates.push_back(v);
@@ -199,7 +197,7 @@ struct knn_index {
   // The new candidate set is added to the supplied array (new_nghs).
   void robustPrune(tvec_point* p, node_id p_id,
                    parlay::sequence<pid> candidates, double alpha,
-                   parlay::slice<int*, int*> new_nghs, bool add = true) {
+                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
@@ -224,27 +222,27 @@ struct knn_index {
     auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
 
-    parlay::sequence<int> new_nbhs = parlay::sequence<int>();
+    parlay::sequence<node_id> new_nbhs = parlay::sequence<node_id>();
 
     size_t candidate_idx = 0;
     while (new_nbhs.size() <= maxDeg && candidate_idx < candidates.size()) {
       // Don't need to do modifications.
-      int p_star = candidates[candidate_idx].first;
+      node_id p_star = candidates[candidate_idx].first;
       candidate_idx++;
-      if (p_star == p->id || p_star == -1) {
+      if (p_star == p->id || p_star == std::numeric_limits<node_id>::max()) {
         continue;
       }
 
       new_nbhs.push_back(p_star);
 
       for (size_t i = candidate_idx; i < candidates.size(); i++) {
-        int p_prime = candidates[i].first;
-        if (p_prime != -1) {
+        node_id p_prime = candidates[i].first;
+        if (p_prime != std::numeric_limits<node_id>::max()) {
           float dist_starprime = distance(v[p_star]->coordinates.begin(),
                                           v[p_prime]->coordinates.begin(), d);
           float dist_pprime = candidates[i].second;
           if (alpha * dist_starprime <= dist_pprime) {
-            candidates[i].first = -1;
+            candidates[i].first = std::numeric_limits<node_id>::max();
           }
         }
       }
@@ -257,8 +255,8 @@ struct knn_index {
   // wrapper to allow calling robustPrune on a sequence of candidates
   // that do not come with precomputed distances
   void robustPrune(Tvec_point<T>* p, node_id p_id,
-                   parlay::sequence<int>& candidates, double alpha,
-                   parlay::slice<int*, int*> new_nghs, bool add = true) {
+                   parlay::sequence<node_id>& candidates, double alpha,
+                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
     parlay::sequence<pid> cc;
     auto p_vertex = G.get_vertex(p_id);
     node_id p_ngh_size = p_vertex.out_degree();
@@ -277,14 +275,14 @@ struct knn_index {
   static int size_of(parlay::slice<G*, G*> nbh) {
     int size = 0;
     size_t i = 0;
-    while (nbh[i] != -1 && i < nbh.size()) {
+    while (nbh[i] != std::numeric_limits<node_id>::max() && i < nbh.size()) {
       size++;
       i++;
     }
     return size;
   }
 
-  void batch_insert(parlay::sequence<int>& inserts, double base = 2,
+  void batch_insert(parlay::sequence<node_id>& inserts, double base = 2,
                     double max_fraction = .02, bool random_order = true) {
     std::cout << "here" << std::endl;
 
@@ -293,11 +291,11 @@ struct knn_index {
     size_t inc = 0;
     size_t count = 0;
     size_t max_batch_size = static_cast<size_t>(max_fraction * n);
-    parlay::sequence<int> rperm;
+    parlay::sequence<node_id> rperm;
     if (random_order)
-      rperm = parlay::random_permutation<int>(static_cast<int>(m), time(NULL));
+      rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m), time(NULL));
     else
-      rperm = parlay::tabulate(m, [&](int i) { return i; });
+      rperm = parlay::tabulate(m, [&](node_id i) { return i; });
     auto shuffled_inserts =
         parlay::tabulate(m, [&](size_t i) { return inserts[rperm[i]]; });
     std::cout << "here1" << std::endl;
@@ -318,8 +316,8 @@ struct knn_index {
       std::cout << "Start of batch insertion round: ceiling = " << ceiling
                 << " floor = " << floor << std::endl;
 
-      parlay::sequence<int> new_out =
-          parlay::sequence<int>(maxDeg * (ceiling - floor), -1);
+      parlay::sequence<node_id> new_out =
+          parlay::sequence<node_id>(maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
 
       // search for each node starting from the medoid, then call
       // robustPrune with the visited list as its candidate set
@@ -340,7 +338,7 @@ struct knn_index {
       // (i,j) to a sequence, then semisorting the sequence by key values
       // std::cout << "here3" << std::endl;
       auto to_flatten = parlay::tabulate(ceiling - floor, [&](size_t i) {
-        int index = shuffled_inserts[i + floor];
+        node_id index = shuffled_inserts[i + floor];
 
         auto new_nghs = parlay::make_slice(new_out.begin() + maxDeg * i,
                                            new_out.begin() + maxDeg * (i + 1));
@@ -382,7 +380,7 @@ struct knn_index {
       parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
         auto[index, candidates] = grouped_by[j];
         // TODO: simpler case when newsize <= maxDeg.
-        parlay::sequence<int> new_out_2(maxDeg, -1);
+        parlay::sequence<node_id> new_out_2(maxDeg, std::numeric_limits<node_id>::max());
         auto output_slice =
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
         robustPrune(v[index], index, candidates, alpha, output_slice);
