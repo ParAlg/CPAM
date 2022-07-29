@@ -11,6 +11,8 @@
 #include "util/NSGDist.h"
 #include "util/distance.h"
 
+bool stats = false;
+
 template <typename T>
 struct knn_index {
   // Pointers to the coordinates for each point.
@@ -61,15 +63,17 @@ struct knn_index {
     // Self-recall and query recall being different is an indicator
     // of distribution shift.
 
-    auto print_fn = [&](node_id u, node_id v, empty_weight wgh) -> bool {
-      std::cout << "Neighbor = " << v << std::endl;
-      return true;
-    };
-    auto m = G.get_vertex(medoid->id);
-    std::cout << "Medoid's neighbors: " << std::endl;
-    m.out_neighbors().foreach_cond(print_fn);
+    if (stats) {
+      auto print_fn = [&](node_id u, node_id v, empty_weight wgh) -> bool {
+        std::cout << "Neighbor = " << v << std::endl;
+        return true;
+      };
+      auto m = G.get_vertex(medoid->id);
+      std::cout << "Medoid's neighbors: " << std::endl;
+      m.out_neighbors().foreach_cond(print_fn);
 
-    compute_self_recall();
+      compute_self_recall();
+    }
   }
 
   parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
@@ -212,8 +216,12 @@ struct knn_index {
 
     // TODO: Is this snippet correct? Do we care bout duplicates?
     if (candidates.size() <= maxDeg) {
+      uint32_t offset = 0;
       for (size_t i = 0; i < candidates.size(); ++i) {
-        new_nghs[i] = candidates[i].first;
+        if(candidates[i].first==p_id)
+          offset++; // increase `offset` as well when doing de-duplication
+        else
+          new_nghs[i-offset] = candidates[i].first;
       }
       return;
     }
@@ -472,12 +480,12 @@ struct knn_index {
       return parlay::hash32(i) % n;
     });
     std::vector<int> ks = {1, 2, 4, 8, 16, 32, 64, 128, 256};
-    auto counts = parlay::sequence<std::vector<int>>::from_function(num_samples,
-        [&] (size_t i) { return std::vector<int>(ks.size()); });
+    auto counts = parlay::sequence<std::vector<int>>::from_function(
+        num_samples, [&](size_t i) { return std::vector<int>(ks.size()); });
     parlay::parallel_for(0, num_samples, [&](size_t i) {
       auto sample_id = ids[i];
       auto ground_truth_nn = all_distances_sorted(sample_id);
-      for (size_t j=0; j<ks.size(); ++j) {
+      for (size_t j = 0; j < ks.size(); ++j) {
         size_t k = ks[j];
         auto neighbors = query(v[sample_id]->coordinates.begin(), k,
                                std::max((size_t)(2 * k + 1), (size_t)maxDeg));
@@ -490,7 +498,7 @@ struct knn_index {
         counts[i][j] = hits;
       }
     });
-    for (size_t j=0; j<ks.size(); ++j) {
+    for (size_t j = 0; j < ks.size(); ++j) {
       size_t k = ks[j];
       auto ds = parlay::delayed_seq<size_t>(
           num_samples, [&](size_t i) { return counts[i][j]; });

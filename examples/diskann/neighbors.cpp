@@ -140,6 +140,7 @@ int main(int argc, char** argv) {
   std::string::size_type n = filename.size();
   if (filename[n - 5] == 'b') fvecs = false;
 
+  stats = P.getOptionValue("-stats");
 
   if (fvecs) {  // vectors are floating point coordinates
     parlay::sequence<Tvec_point<float>> points = parse_fvecs(iFile);
