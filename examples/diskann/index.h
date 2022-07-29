@@ -10,6 +10,7 @@
 #include "types.h"
 #include "util/NSGDist.h"
 #include "util/distance.h"
+#include "util/counter.h"
 
 bool stats = false;
 
@@ -23,6 +24,8 @@ struct knn_index {
   // TODO: rename? are we using round 2?
   double alpha;  // alpha parameter for round 2 of robustPrune
   size_t d;
+
+  atomic_sum_counter<size_t> total_visited;
 
   struct empty_weight {};
   using Graph = aspen::symmetric_graph<empty_weight>;
@@ -47,6 +50,8 @@ struct knn_index {
     std::cout << "Initialized knn_index with maxDeg = " << maxDeg
               << " beamSize = " << beamSize << " alpha = " << alpha
               << " dim = " << dim << std::endl;
+
+    total_visited.reset();
   }
 
   void build_index(parlay::sequence<node_id> inserts) {
@@ -58,6 +63,10 @@ struct knn_index {
     batch_insert(inserts, 2, .02, false);
     std::cout << "G.num_vertices = " << G.num_vertices()
               << " num_edges = " << G.num_edges() << std::endl;
+#ifdef STATS
+    std::cout << "Total vertices visited: " << total_visited.get_value() << std::endl;
+    std::cout << "Total distance calls: " << distance_calls.get_value() << std::endl;
+#endif
 
     // compute "self-recall", i.e. recall from base points.
     // Self-recall and query recall being different is an indicator
@@ -194,6 +203,9 @@ struct knn_index {
                               visited.end(), unvisited_frontier.begin(), less);
       not_done = uf_iter > unvisited_frontier.begin();
     }
+#ifdef STATS
+    total_visited.update_value(visited.size());
+#endif
     return std::make_pair(frontier, parlay::to_sequence(visited));
   }
 
