@@ -375,6 +375,18 @@ struct symmetric_graph {
     V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
   }
 
+  // m : number of vertices to delete
+  // D : array of the deleted vertex ids
+  void delete_vertices_batch(size_t m, vertex_id* D) {
+    timer pt("Insert", false);
+    timer t("Insert", false);
+    auto D_slice = parlay::make_slice(D, D + m);
+    auto key_less = std::less<vertex_id>();
+    parlay::sort_inplace(D_slice, key_less);
+
+    V = vertex_tree::multi_delete_sorted(std::move(V), D_slice);
+  }
+
   // Trying different versions of batch insert:
   // (1) insert_edges_batch_1:
   //

@@ -22,16 +22,21 @@ bool report_stats;
 
 using namespace benchIO;
 
-template<typename T>
-void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy) {
-  parlay::internal::timer t("ANN",report_stats);
+template <typename T>
+void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
+         double alpha, double dummy) {
+  parlay::internal::timer t("ANN", report_stats);
   {
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
     std::cout << "alpha" << alpha << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
-    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<node_id>(i);}));
+    timer build_t;
+    build_t.start();
+    I.build_index(parlay::tabulate(
+        v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+    build_t.next("Build time");
     I.lazy_delete(0);
     parlay::sequence<node_id> deletes;
     deletes.push_back(1);
@@ -39,39 +44,41 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double al
   };
 }
 
-template<typename T>
-void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy,
- int k, int Q, parlay::sequence<Tvec_point<T>*> q, char* outFile) {
-  parlay::internal::timer t("ANN",report_stats);
+template <typename T>
+void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
+         double alpha, double dummy, int k, int Q,
+         parlay::sequence<Tvec_point<T>*> q, char* outFile) {
+  parlay::internal::timer t("ANN", report_stats);
   {
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
-    I.build_index(parlay::tabulate(v.size(), [&] (size_t i){return static_cast<node_id>(i);}));
+    I.build_index(parlay::tabulate(
+        v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
 
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;
-    parlay::parallel_for(0, q.size(), [&] (size_t i) {
+    parlay::parallel_for(0, q.size(), [&](size_t i) {
       query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
     });
 
-    for(auto nbh : query_results[0]) std::cout << nbh << std::endl;
+    for (auto nbh : query_results[0]) std::cout << nbh << std::endl;
 
-    if(outFile != NULL){
-      size_t m = q.size() * (k+1);
+    if (outFile != NULL) {
+      size_t m = q.size() * (k + 1);
       parlay::sequence<unsigned> Pout(m);
-      parlay::parallel_for (0, q.size(), [&] (size_t i) {
-        Pout[(k+1)*i] = q[i]->id;
-        for (int j=0; j < (int) query_results[i].size(); j++) Pout[(k+1)*i + j+1] = query_results[i][j];
-        for(int j=query_results[i].size(); j<k; k++) Pout[(k+1)*i + j+1] = 0;
+      parlay::parallel_for(0, q.size(), [&](size_t i) {
+        Pout[(k + 1) * i] = q[i]->id;
+        for (int j = 0; j < (int)query_results[i].size(); j++)
+          Pout[(k + 1) * i + j + 1] = query_results[i][j];
+        for (int j = query_results[i].size(); j < k; k++)
+          Pout[(k + 1) * i + j + 1] = 0;
       });
       writeIntSeqToFile(Pout, outFile);
-
     }
   };
 }
-
 
 template <class F, class G, class H>
 void time_loop(int rounds, double delay, F initf, G runf, H endf) {
@@ -94,19 +101,25 @@ void time_loop(int rounds, double delay, F initf, G runf, H endf) {
 
 template <typename T>
 void timeNeighbors(parlay::sequence<Tvec_point<T>>& pts, int rounds, int maxDeg,
-                   int beamSize, double alpha, double delta, int k, int beamSizeQ,
-                   parlay::sequence<Tvec_point<T>>& queries, char* outFile) {
+                   int beamSize, double alpha, double delta, int k,
+                   int beamSizeQ, parlay::sequence<Tvec_point<T>>& queries,
+                   char* outFile) {
   size_t n = pts.size();
   auto v =
       parlay::tabulate(n, [&](size_t i) -> Tvec_point<T>* { return &pts[i]; });
 
-  if(queries.size() != 0){
+  if (queries.size() != 0) {
     std::cout << "here" << std::endl;
-    auto q =
-      parlay::tabulate(queries.size(), [&](size_t i) -> Tvec_point<T>* { return &queries[i]; });
-      time_loop(rounds, 0, [&]() {},
-              [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta, k, beamSizeQ, q, outFile); }, [&]() {});
-  } else{
+    auto q = parlay::tabulate(queries.size(), [&](size_t i) -> Tvec_point<T>* {
+      return &queries[i];
+    });
+    time_loop(rounds, 0, [&]() {},
+              [&]() {
+                ANN<T>(v, maxDeg, beamSize, alpha, delta, k, beamSizeQ, q,
+                       outFile);
+              },
+              [&]() {});
+  } else {
     time_loop(rounds, 0, [&]() {},
               [&]() { ANN<T>(v, maxDeg, beamSize, alpha, delta); }, [&]() {});
   }
@@ -146,15 +159,17 @@ int main(int argc, char** argv) {
     parlay::sequence<Tvec_point<float>> points = parse_fvecs(iFile);
     std::cout << "Parsed fvecs, len = " << points.size() << std::endl;
     parlay::sequence<Tvec_point<float>> queries;
-    if(qFile != NULL){
+    if (qFile != NULL) {
       queries = parse_fvecs(qFile);
       std::cout << "Parsed queries, len = " << queries.size() << std::endl;
     }
-    timeNeighbors<float>(points, rounds, R, L, alpha, delta, k, Q, queries, oFile);
+    timeNeighbors<float>(points, rounds, R, L, alpha, delta, k, Q, queries,
+                         oFile);
   } else {  // vectors are uint8 coordinates
     parlay::sequence<Tvec_point<uint8_t>> points = parse_bvecs(iFile);
     parlay::sequence<Tvec_point<uint8_t>> queries;
-    if(qFile != NULL) queries = parse_bvecs(qFile);
-    timeNeighbors<uint8_t>(points, rounds, R, L, alpha, delta, k, Q, queries, oFile);
+    if (qFile != NULL) queries = parse_bvecs(qFile);
+    timeNeighbors<uint8_t>(points, rounds, R, L, alpha, delta, k, Q, queries,
+                           oFile);
   }
 }
