@@ -52,8 +52,6 @@ struct knn_index {
   void build_index(parlay::sequence<node_id> inserts) {
     // Find the medoid, which each beamSearch will begin from.
     node_id medoid_id = find_approx_medoid();
-    std::cout << "medoid coordinates = " << medoid->coordinates.begin()
-              << std::endl;
     G.insert_vertex_inplace(medoid_id, nullptr);
     batch_insert(inserts, 2, .02, false);
     std::cout << "G.num_vertices = " << G.num_vertices()
@@ -74,6 +72,16 @@ struct knn_index {
 
       compute_self_recall();
     }
+  }
+
+  void insert(node_id p){
+    parlay::sequence<node_id> inserts;
+    inserts.push_back(p);
+    batch_insert(inserts, 2, .02, false);
+  }
+
+  void insert(parlay::sequence<node_id> inserts, bool random_order = false){
+    batch_insert(inserts, 2, .02, random_order);
   }
 
   parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
@@ -115,9 +123,17 @@ struct knn_index {
 		delete_set.insert(p);
 	}
 
-  // void consolidate_deletes(){
-
-  // }
+  void consolidate_deletes(){
+    //freeze the delete set before beginning a consolidate
+    //later will add versioning/locks
+    parlay::sequence<node_id> delete_vec;
+    for(auto d : delete_set) delete_vec.push_back(d);
+    delete_set.clear();
+    preprocess_deleted_vertices(delete_vec);
+    auto to_consolidate = parlay::tabulate(v.size(), [&] (node_id i) {return i;});
+    consolidate_deletes_internal(delete_vec, to_consolidate);
+    remove_deleted_vertices(delete_vec);
+  }
 
  private:
 
@@ -127,6 +143,96 @@ struct knn_index {
   // medoid: "root" of the proximity graph
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
+
+  //for vertices in delete_set, remove any edges to other deleted vertices
+  //this saves work when we add the out-neighbors of a deleted vertex to
+  //a non-deleted vertex
+  void preprocess_deleted_vertices(parlay::sequence<node_id> &delete_vec){
+    auto filtered_edges = 
+      parlay::sequence<std::tuple<node_id, edge_node*>>(delete_vec.size());
+
+    parlay::parallel_for(0, delete_vec.size(), [&] (size_t i){
+      node_id index = delete_vec[i];
+      auto current_vtx = G.get_vertex(index);
+      auto g = [&](node_id a) {
+        return (parlay::find(delete_vec, a) != delete_vec.end());
+      };
+      parlay::sequence<node_id> remaining_nbh;
+      auto f = [&](node_id u, node_id v, empty_weight wgh) {
+        if (g(v)) {
+          remaining_nbh.push_back(v);
+        }
+        return true;
+      };
+      current_vtx.out_neighbors().foreach_cond(f);
+      //TODO only replace if remaining_nbh is actually smaller than current_vtx.out_neighbors()
+      auto begin = (std::tuple<node_id, empty_weight>*)remaining_nbh.begin();
+      auto tree = edge_tree(begin, begin + remaining_nbh.size());
+      filtered_edges[i] = {index, tree.root};
+      tree.root = nullptr;
+    });
+    G.insert_vertices_batch(filtered_edges.size(), filtered_edges.begin()); 
+  }
+
+  void consolidate_deletes_internal(parlay::sequence<node_id> &delete_vec, 
+    parlay::sequence<node_id> &to_consolidate){
+    auto consolidated_vertices = 
+      parlay::sequence<std::tuple<node_id, edge_node*>>(to_consolidate.size());
+    std::vector<bool> needs_consolidate(to_consolidate.size(), false);
+
+    parlay::parallel_for(0, to_consolidate.size(), [&] (size_t i) {
+      node_id index = to_consolidate[i];
+      if(parlay::find(delete_vec, index) == delete_vec.end()){
+        //remove deleted vertices and add their out_nbh
+        bool change = false;
+        auto current_vtx = G.get_vertex(index);
+        parlay::sequence<node_id> candidates;
+        auto g = [&] (node_id a){return delete_set.find(a) == delete_set.end();};
+
+        auto f = [&] (node_id u, node_id v, empty_weight wgh){
+          if(g(v)) candidates.push_back(v);
+          return true;
+        };
+
+        auto h = [&] (node_id u, node_id v, empty_weight wgh){
+          if(g(v)) candidates.push_back(v);
+          else{
+            change = true;
+            auto vtx = G.get_vertex(v);
+            vtx.out_neighbors().foreach_cond(f);
+          }
+          return true;
+        };
+        current_vtx.out_neighbors().foreach_cond(h);
+        if(change){
+          needs_consolidate[i] = true;
+          if(candidates.size() <= maxDeg){
+            auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
+            auto tree = edge_tree(begin, begin + candidates.size());
+            consolidated_vertices[i] = {index, tree.root};
+            tree.root = nullptr;
+          } else{
+            parlay::sequence<node_id> new_out_2(maxDeg, std::numeric_limits<node_id>::max());
+            auto output_slice =
+              parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
+            robustPrune(v[index], index, candidates, alpha, output_slice, false);
+            size_t deg = size_of(output_slice);
+            auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
+            auto tree = edge_tree(begin, begin + deg);
+            consolidated_vertices[i] = {index, tree.root};
+            tree.root = nullptr;
+          }
+        }
+      }
+    });
+    auto filtered_vertices = parlay::pack(consolidated_vertices, needs_consolidate);
+    G.insert_vertices_batch(filtered_vertices.size(), filtered_vertices.begin());
+  }
+
+  void remove_deleted_vertices(parlay::sequence<node_id> &delete_vec){
+    G.delete_vertices_batch(delete_vec.size(), delete_vec.begin());
+  }
+
   std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
       T* p_coords, int beamSize) {
     // initialize data structures
@@ -166,7 +272,6 @@ struct knn_index {
         return true;
       };
 
-      // TODO: reserve?
       parlay::sequence<node_id> candidates;
       auto f = [&](node_id u, node_id v, empty_weight wgh) {
         if (g(v)) {
@@ -292,7 +397,6 @@ struct knn_index {
 
   void batch_insert(parlay::sequence<node_id>& inserts, double base = 2,
                     double max_fraction = .02, bool random_order = true) {
-    std::cout << "here" << std::endl;
 
     size_t n = v.size();
     size_t m = inserts.size();
@@ -306,7 +410,6 @@ struct knn_index {
       rperm = parlay::tabulate(m, [&](node_id i) { return i; });
     auto shuffled_inserts =
         parlay::tabulate(m, [&](size_t i) { return inserts[rperm[i]]; });
-    std::cout << "here1" << std::endl;
 
     size_t floor;
     size_t ceiling;
@@ -321,8 +424,8 @@ struct knn_index {
         count += static_cast<size_t>(max_batch_size);
       }
 
-      std::cout << "Start of batch insertion round: ceiling = " << ceiling
-                << " floor = " << floor << std::endl;
+      // std::cout << "Start of batch insertion round: ceiling = " << ceiling
+      //           << " floor = " << floor << std::endl;
 
       parlay::sequence<node_id> new_out =
           parlay::sequence<node_id>(maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
@@ -371,11 +474,11 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
-      std::cout << "Number of vertex insertions for batch: " << inc << " : "
-                << KVs.size() << std::endl;
+      // std::cout << "Number of vertex insertions for batch: " << inc << " : "
+      //           << KVs.size() << std::endl;
       G.insert_vertices_batch(KVs.size(), KVs.begin());
-      std::cout << "After inserts, G.num_vertices() (max node_id) = "
-                << G.num_vertices() << std::endl;
+      // std::cout << "After inserts, G.num_vertices() (max node_id) = "
+      //           << G.num_vertices() << std::endl;
 
       // TODO: update the code below:
       auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
@@ -399,7 +502,7 @@ struct knn_index {
         tree.root = nullptr;
       });
 
-      std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+      // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
       inc += 1;

@@ -29,7 +29,6 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
   {
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
-    std::cout << "alpha" << alpha << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
     timer build_t;
@@ -37,10 +36,14 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     I.build_index(parlay::tabulate(
         v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
     build_t.next("Build time");
-    I.lazy_delete(0);
-    parlay::sequence<node_id> deletes;
-    deletes.push_back(1);
-    deletes.push_back(2);
+    // int parts = 20;
+    // size_t m = v.size()/parts;
+    // for(int i=0; i<parts; i++){
+    //   parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
+    //   I.lazy_delete(indices);
+    //   I.consolidate_deletes();
+    //   I.insert(indices);
+    // }
   };
 }
 
@@ -54,16 +57,22 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
-    I.build_index(parlay::tabulate(
-        v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+    I.build_index(parlay::tabulate( v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+
+    int parts = 20;
+    size_t m = v.size()/parts;
+    for(int i=0; i<parts; i++){
+      parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
+      I.lazy_delete(indices);
+      I.consolidate_deletes();
+      I.insert(indices);
+    }
 
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;
     parlay::parallel_for(0, q.size(), [&](size_t i) {
       query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
     });
-
-    for (auto nbh : query_results[0]) std::cout << nbh << std::endl;
 
     if (outFile != NULL) {
       size_t m = q.size() * (k + 1);
