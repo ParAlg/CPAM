@@ -9,6 +9,7 @@
 #include "../graphs/aspen/aspen.h"
 #include "types.h"
 #include "util/NSGDist.h"
+#include "util/counter.h"
 #include "util/distance.h"
 
 bool stats = false;
@@ -20,9 +21,10 @@ struct knn_index {
 
   size_t maxDeg;
   size_t beamSize;
-  // TODO: rename? are we using round 2?
-  double alpha;  // alpha parameter for round 2 of robustPrune
+  double alpha;
   size_t d;
+
+  atomic_sum_counter<size_t> total_visited;
 
   struct empty_weight {};
   using Graph = aspen::symmetric_graph<empty_weight>;
@@ -47,6 +49,8 @@ struct knn_index {
     std::cout << "Initialized knn_index with maxDeg = " << maxDeg
               << " beamSize = " << beamSize << " alpha = " << alpha
               << " dim = " << dim << std::endl;
+
+    total_visited.reset();
   }
 
   void build_index(parlay::sequence<node_id> inserts) {
@@ -56,6 +60,12 @@ struct knn_index {
     batch_insert(inserts, 2, .02, false);
     std::cout << "G.num_vertices = " << G.num_vertices()
               << " num_edges = " << G.num_edges() << std::endl;
+#ifdef STATS
+    std::cout << "Total vertices visited: " << total_visited.get_value()
+              << std::endl;
+    std::cout << "Total distance calls: " << distance_calls.get_value()
+              << std::endl;
+#endif
 
     // compute "self-recall", i.e. recall from base points.
     // Self-recall and query recall being different is an indicator
@@ -100,28 +110,32 @@ struct knn_index {
     return neighbors;
   }
 
-  void lazy_delete(parlay::sequence<node_id> deletes){
-		for(node_id p : deletes){
-			if(p < 0 || p > (node_id) v.size() ){
-				std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-				abort();
-			}
-			if(p != medoid->id) delete_set.insert(p);
-			else std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-		} 
-	}
+  void lazy_delete(parlay::sequence<node_id> deletes) {
+    for (node_id p : deletes) {
+      if (p < 0 || p > (node_id)v.size()) {
+        std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                  << std::endl;
+        abort();
+      }
+      if (p != medoid->id)
+        delete_set.insert(p);
+      else
+        std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+    }
+  }
 
-	void lazy_delete(node_id p){
-		if(p < 0 || p > (node_id) v.size()){
-			std::cout << "ERROR: invalid point " << p << " given to lazy_delete" << std::endl; 
-			abort();
-		}
-		if(p == (node_id) medoid->id){
-			std::cout << "Deleting medoid not permitted; continuing" << std::endl; 
-			return;
-		} 
-		delete_set.insert(p);
-	}
+  void lazy_delete(node_id p) {
+    if (p < 0 || p > (node_id)v.size()) {
+      std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                << std::endl;
+      abort();
+    }
+    if (p == (node_id)medoid->id) {
+      std::cout << "Deleting medoid not permitted; continuing" << std::endl;
+      return;
+    }
+    delete_set.insert(p);
+  }
 
   void consolidate_deletes(){
     //freeze the delete set before beginning a consolidate
@@ -136,7 +150,6 @@ struct knn_index {
   }
 
  private:
-
   std::set<node_id> delete_set;
   // p_coords: query vector coordinates
   // v: database of vectors
@@ -248,7 +261,7 @@ struct knn_index {
       return std::pair{q, dist};
     };
     int bits = std::ceil(std::log2(beamSize * beamSize));
-    parlay::sequence<node_id> hash_table(1 << bits, -1);
+    parlay::sequence<node_id> hash_table(1 << bits, std::numeric_limits<node_id>::max());
 
     // the frontier starts with the medoid
     frontier.push_back(make_pid(medoid->id));
@@ -299,6 +312,9 @@ struct knn_index {
                               visited.end(), unvisited_frontier.begin(), less);
       not_done = uf_iter > unvisited_frontier.begin();
     }
+#ifdef STATS
+    total_visited.update_value(visited.size());
+#endif
     return std::make_pair(frontier, parlay::to_sequence(visited));
   }
 
@@ -306,7 +322,10 @@ struct knn_index {
   // The new candidate set is added to the supplied array (new_nghs).
   void robustPrune(tvec_point* p, node_id p_id,
                    parlay::sequence<pid> candidates, double alpha,
-                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
+                   parlay::slice<node_id*, node_id*> new_nghs,
+                   bool add = true) {
+    auto less = [&](pid a, pid b) { return a.second < b.second; };
+
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
@@ -319,26 +338,26 @@ struct knn_index {
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
 
-    // TODO: Is this snippet correct? Do we care bout duplicates?
     if (candidates.size() <= maxDeg) {
       uint32_t offset = 0;
-      for (size_t i = 0; i < candidates.size(); ++i) {
-        if(candidates[i].first==p_id)
-          offset++; // increase `offset` as well when doing de-duplication
-        else
-          new_nghs[i-offset] = candidates[i].first;
+      parlay::sort_inplace(candidates, less);
+      for (size_t i=0; i<candidates.size(); ++i) {
+        node_id ngh = candidates[i].first;
+        if (ngh != p_id && (i == 0 || ngh != candidates[i-1].first)) {
+          new_nghs[offset] = ngh;
+          offset++;
+        }
       }
       return;
     }
 
     // Sort the candidate set in reverse order according to distance from p.
-    auto less = [&](pid a, pid b) { return a.second < b.second; };
     parlay::sort_inplace(candidates, less);
 
-    parlay::sequence<node_id> new_nbhs = parlay::sequence<node_id>();
+    size_t num_new = 0;
 
     size_t candidate_idx = 0;
-    while (new_nbhs.size() <= maxDeg && candidate_idx < candidates.size()) {
+    while (num_new <= maxDeg && candidate_idx < candidates.size()) {
       // Don't need to do modifications.
       node_id p_star = candidates[candidate_idx].first;
       candidate_idx++;
@@ -346,7 +365,8 @@ struct knn_index {
         continue;
       }
 
-      new_nbhs.push_back(p_star);
+      new_nghs[num_new] = p_star;
+      num_new++;
 
       for (size_t i = candidate_idx; i < candidates.size(); i++) {
         node_id p_prime = candidates[i].first;
@@ -360,16 +380,14 @@ struct knn_index {
         }
       }
     }
-    for (size_t i = 0; i < new_nbhs.size(); ++i) {
-      new_nghs[i] = new_nbhs[i];  // change names
-    }
   }
 
   // wrapper to allow calling robustPrune on a sequence of candidates
   // that do not come with precomputed distances
   void robustPrune(Tvec_point<T>* p, node_id p_id,
                    parlay::sequence<node_id>& candidates, double alpha,
-                   parlay::slice<node_id*, node_id*> new_nghs, bool add = true) {
+                   parlay::slice<node_id*, node_id*> new_nghs,
+                   bool add = true) {
     parlay::sequence<pid> cc;
     auto p_vertex = G.get_vertex(p_id);
     node_id p_ngh_size = p_vertex.out_degree();
@@ -400,35 +418,28 @@ struct knn_index {
 
     size_t n = v.size();
     size_t m = inserts.size();
-    size_t inc = 0;
-    size_t count = 0;
-    size_t max_batch_size = static_cast<size_t>(max_fraction * n);
+    size_t max_batch_size = static_cast<size_t>(std::ceil(max_fraction * n));
     parlay::sequence<node_id> rperm;
     if (random_order)
-      rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m), time(NULL));
+      rperm = parlay::random_permutation<node_id>(static_cast<node_id>(m),
+                                                  time(NULL));
     else
       rperm = parlay::tabulate(m, [&](node_id i) { return i; });
     auto shuffled_inserts =
         parlay::tabulate(m, [&](size_t i) { return inserts[rperm[i]]; });
 
-    size_t floor;
-    size_t ceiling;
-    while (count < m) {
-      if (pow(base, inc) <= max_batch_size) {
-        floor = static_cast<size_t>(pow(base, inc)) - 1;
-        ceiling = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
-        count = std::min(static_cast<size_t>(pow(base, inc + 1)), m) - 1;
-      } else {
-        floor = count;
-        ceiling = std::min(count + static_cast<size_t>(max_batch_size), m);
-        count += static_cast<size_t>(max_batch_size);
-      }
+    size_t floor=0, ceiling=0;
+    uint32_t cnt_batch = 0;
+    while(ceiling<m) {
+      cnt_batch++;
+      floor = ceiling;
+      ceiling = std::min({m, size_t(floor*base)+1, floor+max_batch_size});
 
       // std::cout << "Start of batch insertion round: ceiling = " << ceiling
       //           << " floor = " << floor << std::endl;
 
-      parlay::sequence<node_id> new_out =
-          parlay::sequence<node_id>(maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
+      parlay::sequence<node_id> new_out = parlay::sequence<node_id>(
+          maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
 
       // search for each node starting from the medoid, then call
       // robustPrune with the visited list as its candidate set
@@ -474,8 +485,13 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
+<<<<<<< HEAD
       // std::cout << "Number of vertex insertions for batch: " << inc << " : "
       //           << KVs.size() << std::endl;
+=======
+      std::cout << "Number of vertex insertions for batch: " << cnt_batch << " : "
+                << KVs.size() << std::endl;
+>>>>>>> 26a8fdb592ab7ea8cd853454b09b948e1d6bc727
       G.insert_vertices_batch(KVs.size(), KVs.begin());
       // std::cout << "After inserts, G.num_vertices() (max node_id) = "
       //           << G.num_vertices() << std::endl;
@@ -491,7 +507,8 @@ struct knn_index {
       parlay::parallel_for(0, grouped_by.size(), [&](size_t j) {
         auto[index, candidates] = grouped_by[j];
         // TODO: simpler case when newsize <= maxDeg.
-        parlay::sequence<node_id> new_out_2(maxDeg, std::numeric_limits<node_id>::max());
+        parlay::sequence<node_id> new_out_2(
+            maxDeg, std::numeric_limits<node_id>::max());
         auto output_slice =
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
         robustPrune(v[index], index, candidates, alpha, output_slice);
@@ -505,7 +522,6 @@ struct knn_index {
       // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
 
-      inc += 1;
     }
   }
 

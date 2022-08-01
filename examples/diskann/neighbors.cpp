@@ -157,6 +157,8 @@ int main(int argc, char** argv) {
 
   // TODO: add back qfile.
 
+  distance_calls.reset();
+
   bool fvecs = true;
   std::string filename = std::string(iFile);
   std::string::size_type n = filename.size();

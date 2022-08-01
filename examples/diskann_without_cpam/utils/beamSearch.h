@@ -33,8 +33,11 @@
 #include "types.h"
 //#include "clustertree.h"
 #include "indexTools.h"
+#include "counter.h"
 
 extern bool report_stats;
+
+atomic_sum_counter<size_t> total_visited;
 
 using pid = std::pair<int, float>;
 
@@ -161,6 +164,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
 				 unvisited_frontier.begin(), less);
     not_done = uf_iter > unvisited_frontier.begin();
   }
+  total_visited.update_value(visited.size());
   return std::make_pair(frontier, parlay::to_sequence(visited));
 }
 

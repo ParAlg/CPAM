@@ -36,6 +36,7 @@ extern bool report_stats;
 
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> &v, int k, int maxDeg, int beamSize, int beamSizeQ, double alpha, double dummy,
+
   parlay::sequence<Tvec_point<T>*> &q) {
   parlay::internal::timer t("ANN",report_stats);
   {
@@ -68,12 +69,16 @@ void ANN(parlay::sequence<Tvec_point<T>*> &v, int k, int maxDeg, int beamSize, i
 template<typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize, double alpha, double dummy) {
   parlay::internal::timer t("ANN",report_stats);
+  distance_calls.reset();
+  total_visited.reset();
   {
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(maxDeg, beamSize, alpha, d);
     I.build_index(v, parlay::tabulate(v.size(), [&] (size_t i){return static_cast<int>(i);}));
+    std::cout << "Total vertices visited: " << total_visited.get_value() << std::endl;
+    std::cout << "Total distance calls: " << distance_calls.get_value() << std::endl;
     t.next("Built index");
     if(report_stats){
       graph_stats(v);
