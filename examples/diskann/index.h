@@ -53,6 +53,11 @@ struct knn_index {
     total_visited.reset();
   }
 
+  void print_graph_status(){
+    std::cout << "G.num_vertices = " << G.num_vertices()
+              << " num_edges = " << G.num_edges() << std::endl;
+  }
+
   void build_index(parlay::sequence<node_id> inserts) {
     // Find the medoid, which each beamSearch will begin from.
     node_id medoid_id = find_approx_medoid();
@@ -243,7 +248,10 @@ struct knn_index {
   }
 
   void remove_deleted_vertices(parlay::sequence<node_id> &delete_vec){
+    // std::cout << delete_vec.size() << std::endl; 
+    // std::cout << G.num_vertices() << std::endl;
     G.delete_vertices_batch(delete_vec.size(), delete_vec.begin());
+    // std::cout << G.num_vertices() << std::endl; 
   }
 
   std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
@@ -485,13 +493,8 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
-<<<<<<< HEAD
       // std::cout << "Number of vertex insertions for batch: " << inc << " : "
       //           << KVs.size() << std::endl;
-=======
-      std::cout << "Number of vertex insertions for batch: " << cnt_batch << " : "
-                << KVs.size() << std::endl;
->>>>>>> 26a8fdb592ab7ea8cd853454b09b948e1d6bc727
       G.insert_vertices_batch(KVs.size(), KVs.begin());
       // std::cout << "After inserts, G.num_vertices() (max node_id) = "
       //           << G.num_vertices() << std::endl;
