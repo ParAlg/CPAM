@@ -38,11 +38,16 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     build_t.next("Build time");
     int parts = 20;
     size_t m = v.size()/parts;
-    parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(j);});
-    std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
-    I.lazy_delete(indices);
-    I.consolidate_deletes();
-    I.print_graph_status();
+    for(int i=0; i<1; i++){
+      parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
+      std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
+      I.lazy_delete(indices);
+      I.consolidate_deletes();
+      I.print_graph_status();
+      // std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
+      // I.insert(indices);
+      // I.print_graph_status();
+    }
   };
 }
 
@@ -57,6 +62,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
     I.build_index(parlay::tabulate( v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+
 
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;
