@@ -196,7 +196,7 @@ struct knn_index {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(
             to_consolidate.size());
-    std::vector<bool> needs_consolidate(to_consolidate.size(), true);
+    std::vector<bool> needs_consolidate(to_consolidate.size(), false);
 
     parlay::parallel_for(0, to_consolidate.size(), [&](size_t i) {
       node_id index = to_consolidate[i];
@@ -220,12 +220,21 @@ struct knn_index {
           else {
             change = true;
             auto vtx = G.get_vertex(v);
-            vtx.out_neighbors().foreach_cond(f);
+            return vtx.out_neighbors().foreach_cond(f);
           }
           return true;
         };
-        current_vtx.out_neighbors().foreach_cond(h);
-        if (change) {
+        bool ret = current_vtx.out_neighbors().foreach_cond(h);
+        // for(auto cand : candidates){
+        //   if(old_delete_set.find(cand) != old_delete_set.end()){
+        //     std::cout << "ERROR: after assembling candidate list, " <<
+        //     std::endl;
+        //     std::cout << "vertex " << index << " candidate list contains
+        //     deleted neighbor "
+        //       << cand << std::endl;
+        //   }
+        // }
+        if (change && ret) {
           needs_consolidate[i] = true;
           if (candidates.size() <= maxDeg) {
             auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
@@ -245,8 +254,6 @@ struct knn_index {
             consolidated_vertices[i] = {index, tree.root};
             tree.root = nullptr;
           }
-        } else {
-          needs_consolidate[i] = false;
         }
       }
     });
