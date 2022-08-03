@@ -148,8 +148,9 @@ struct knn_index {
     for(auto d : delete_set) delete_vec.push_back(d);
     std::set<unsigned> old_delete_set;
     delete_set.swap(old_delete_set);
-    auto to_consolidate = parlay::tabulate(v.size(), [&] (node_id i) {return i;});
-    consolidate_deletes_internal(old_delete_set, to_consolidate);
+    // auto to_consolidate = parlay::tabulate(v.size(), [&] (node_id i) {return i;});
+    // consolidate_deletes_internal(old_delete_set, to_consolidate);
+    consolidate_deletes_simple(old_delete_set);
     remove_deleted_vertices(delete_vec);
     check_deletes_correct(old_delete_set);
   }
@@ -161,6 +162,29 @@ struct knn_index {
   // medoid: "root" of the proximity graph
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
+
+  void consolidate_deletes_simple(std::set<node_id> old_delete_set){
+    auto consolidated_vertices = 
+      parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
+    
+    parlay::parallel_for(0, v.size(), [&] (size_t i) {
+      if(old_delete_set.find(i) == old_delete_set.end()){
+        auto current_vtx = G.get_vertex(i);
+        parlay::sequence<node_id> candidates;
+        auto g = [&] (node_id a){return old_delete_set.find(a) == old_delete_set.end();};
+        auto f = [&](node_id u, node_id v, empty_weight wgh){
+          if(g(v)) candidates.push_back(v);
+          return true;
+        };
+        current_vtx.out_neighbors().foreach_cond(f);
+        auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
+        auto tree = edge_tree(begin, begin + candidates.size());
+        consolidated_vertices[i] = {i, tree.root};
+        tree.root = nullptr;
+      }
+    });
+    G.insert_vertices_batch(consolidated_vertices.size(), consolidated_vertices.begin());
+  }
 
 
   void consolidate_deletes_internal(std::set<node_id> old_delete_set, 
