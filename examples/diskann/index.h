@@ -191,7 +191,7 @@ struct knn_index {
     parlay::sequence<node_id> &to_consolidate){
     auto consolidated_vertices =
       parlay::sequence<std::tuple<node_id, edge_node*>>(to_consolidate.size());
-    std::vector<bool> needs_consolidate(to_consolidate.size(), false);
+    std::vector<bool> needs_consolidate(to_consolidate.size(), true);
 
     parlay::parallel_for(0, to_consolidate.size(), [&] (size_t i) {
       node_id index = to_consolidate[i];
@@ -249,6 +249,8 @@ struct knn_index {
             consolidated_vertices[i] = {index, tree.root};
             tree.root = nullptr;
           }
+        } else {
+          needs_consolidate[i] = false;
         }
       }
     });
