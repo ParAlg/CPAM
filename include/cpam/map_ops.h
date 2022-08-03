@@ -236,6 +236,8 @@ struct map_ops : Seq {
     Seq::set_entry(a, re);
   }
 
+  // Value-based version of combine. No reverse on this one for some
+  // reason.
   template <class VE, class BinaryOp>
   static inline void combine_values_v(node* a, VE v0, const BinaryOp& op) {
     ET re = Seq::get_entry(a);
@@ -263,65 +265,6 @@ struct map_ops : Seq {
 	  output_r(t);
 	  std::cout << std::endl;
   }
-
-// TODO: remove
-//  // Works in-place when possible.
-//  // extra_b2 means there is an extra pointer to b2 not included
-//  // in the reference count.  It is used as an optimization to reduce
-//  // the number of ref_cnt updates.
-//  template <class BinaryOp>
-//  static node* uniont(node* b1, node* b2, const BinaryOp op,
-//		      bool extra_b2 = false) {
-//    if (!b1) return GC::inc_if(b2, extra_b2);
-//    if (!b2) return b1;
-//
-//    size_t n1 = Seq::size(b1);   size_t n2 = Seq::size(b2);
-//
-//    bool copy = extra_b2 || (b2->ref_cnt > 1);
-//    node* r = copy ? Seq::make_node(Seq::get_entry(b2)) : b2;
-//    split_info bsts = split(b1, get_key(b2));
-//
-//    auto P = utils::fork<node*>(Tree::do_parallel(n1, n2),
-//      [&] () {return uniont(bsts.first, b2->lc, op, copy);},
-//      [&] () {return uniont(bsts.second, b2->rc, op, copy);});
-//
-//    if (copy && !extra_b2) GC::decrement_recursive(b2);
-//    if (bsts.removed) combine_values(r, bsts.entry, true, op);
-//    return Seq::node_join(P.first, P.second, r);
-//  }
-
-// TODO: remove
-//  // extra_b2 is for b2
-//  template <class Seq1, class Seq2, class BinaryOp>
-//  static node* intersect(typename Seq1::node* b1, typename Seq2::node* b2,
-//			 const BinaryOp& op,
-//			 bool extra_b2 = false) {
-//	//std::cout << "size: " << n1 << " " << n2 << std::endl;
-//    if (!b1) {if (!extra_b2) Seq2::GC::decrement_recursive(b2); return NULL;}
-//    if (!b2) {Seq1::GC::decrement_recursive(b1); return NULL;}
-//    size_t n1 = Seq1::size(b1);   size_t n2 = Seq2::size(b2);
-//    bool copy = extra_b2 || (b2->ref_cnt > 1);
-//    typename Seq1::split_info bsts = Seq1::split(b1, Seq2::get_key(b2));
-//
-//    auto P = utils::fork<node*>(Tree::do_parallel(n1, n2),
-//	[&]() {return intersect<Seq1,Seq2>(bsts.first, b2->lc, op, copy);},
-//	[&]() {return intersect<Seq1,Seq2>(bsts.second, b2->rc, op, copy);}
-//    );
-//
-//    if (bsts.removed) {
-//      ET e(Seq2::get_key(b2),
-//	   op(Seq1::Entry::get_val(bsts.entry),
-//	      Seq2::Entry::get_val(Seq2::get_entry(b2))));
-//      node* r = Seq::make_node(e);
-//      //if (copy && !extra_b2) Seq2::GC::decrement_recursive(b2);
-//      Seq2::GC::dec_if(b2, copy, extra_b2);
-//      return Seq::node_join(P.first, P.second, r);
-//    } else {
-//      //if (copy && !extra_b2) Seq2::GC::decrement_recursive(b2);
-//      Seq2::GC::dec_if(b2, copy, extra_b2);
-//      return Seq::join2(P.first, P.second);
-//    }
-//  }
 
   // reuses node
   template <class BinaryOp>
@@ -579,122 +522,6 @@ struct map_ops : Seq {
       return Seq::join(right_2(lc, low), e, left_2(rc, high), nullptr);
     }
   }
-
-// TODO
-//  static node* left_number(node* b, size_t rg) {
-//	  if (!b) return NULL;
-//	  if (rg == 0) return NULL;
-//	  if (Seq::size(b) <= rg) {
-//		  GC::increment(b); return b;
-//	  }//?
-//	  size_t x = Seq::size(b->lc);
-//	  if (x < rg) {
-//		  node* rr = Seq::make_node(Seq::get_entry(b));
-//		  GC::increment(b->lc);
-//		  node* rtree = left_number(b->rc, rg-x-1);
-//		  return Seq::node_join(b->lc, rtree, rr);
-//	  } else {
-//		  return left_number(b->lc, rg);
-//	  }
-//  }
-
-// TODO
-//  static node* range_num(node* b, const K& low, size_t rg) {
-//    while (b) {
-//      if (Entry::comp(get_key(b), low)) { b = b->rc; continue; }
-//      break;
-//    }
-//    if (!b) return NULL;
-//    node* ltree = range_num(b->lc, low, rg);
-//    size_t x = Seq::size(ltree);
-//    if (x == rg) return ltree;
-//    node* rtree = left_number(b->rc, rg-x-1);
-//    node* rr = Seq::make_node(Seq::get_entry(b));
-//    return Seq::node_join(ltree, rtree, rr);;
-//  }
-
-// TODO
-//  template<class Map, class Reduce>
-//  static std::pair<typename Reduce::T, size_t> left_number_mr(node* b, size_t rg, const Map& mp, const Reduce& rdc,
-//													size_t grain=utils::node_limit) {
-//	  using T = typename Reduce::T;
-//	  if (!b) return std::make_pair(rdc.identity(), 0);
-//	  if (rg == 0) return std::make_pair(rdc.identity(), 0);
-//	  size_t sz = Seq::size(b);
-//	  if (sz <= rg) {
-//		  //T res = Seq::map_reducef(b, mp, rdc, I);
-//		  T res = Seq::template map_reduce<Reduce>(b, mp, rdc, grain);
-//		  return std::make_pair(res, sz);
-//	  }
-//	  size_t x = Seq::size(b->lc);
-//	  if (x < rg) {
-//		  //T lres = Seq::map_reducef(b->lc, mp, rdc, I);
-//		  T lres = Seq::template map_reduce<Reduce>(b->lc, mp, rdc, grain);
-//		  T res = mp(Seq::get_entry(b));
-//		  res = rdc.add(lres, res);
-//		  std::pair<T, size_t> rres = left_number_mr(b->rc, rg-x-1, mp, rdc);
-//		  size_t s = x+1+rres.second;
-//		  res = rdc.add(res, rres.first);
-//		  return std::make_pair(res, s);
-//	  } else {
-//		  return left_number_mr(b->lc, rg, mp, rdc);
-//	  }
-//  }
-
-// TODO
-//  template<class Map, class Reduce>
-//  static std::pair<typename Reduce::T, size_t> range_num_mr(node* b, const K& low, size_t rg, const Map& mp, const Reduce& rdc,
-//												size_t grain=utils::node_limit) {
-//	using T = typename Reduce::T;
-//    while (b) {
-//      if (Entry::comp(get_key(b), low)) { b = b->rc; continue; }
-//      break;
-//    }
-//	if (!b) return std::make_pair(rdc.identity(), 0);
-//	using ptype = std::pair<T, size_t>;
-//
-//	ptype ltree = range_num_mr(b->lc, low, rg, mp, rdc);
-//	size_t x = ltree.second;
-//	if (x == rg) return ltree;
-//	ptype rtree = left_number_mr(b->rc, rg-x-1, mp, rdc);
-//	T rr = mp(Seq::get_entry(b));
-//	size_t s = x + 1 + rtree.second;
-//	rr = rdc.add(ltree.first, rr);
-//	rr = rdc.add(rr, rtree.first);
-//	return std::make_pair(rr, s);
-//  }
-
-// TODO: remove
-//  template <class Func, class J>
-//  static node* insert_j(node* b, const ET& e, const Func& f, const J& join,
-//			bool extra_ptr=false){
-//    if (!b) return Seq::single(e);
-//    bool copy = extra_ptr || (b->ref_cnt > 1);
-//
-//    if (Entry::comp(get_key(b), Entry::get_key(e))) {
-//      node* l = GC::inc_if(b->lc, copy);
-//      node* r = insert_j(b->rc, e, f, join, copy);
-//      node* o = GC::copy_if(b, copy, extra_ptr);
-//      return join(l, r, o);
-//    }
-//    else if (Entry::comp(Entry::get_key(e), get_key(b))) {
-//      node* l = insert_j(b->lc, e, f, join, copy);
-//      node* r = GC::inc_if(b->rc, copy);
-//      node* o = GC::copy_if(b, copy, extra_ptr);
-//      return join(l, r, o);
-//    }
-//    else {
-//      node* l = GC::inc_if(b->lc, copy);
-//      node* r = GC::inc_if(b->rc, copy);
-//      node* o = GC::copy_if(b, copy, extra_ptr);
-//	  ET be = Seq::get_entry(b);
-//	  Seq::set_entry(o, e);
-//      //combine_values(o, e, false, f);
-//	  combine_values(o, be, true, f);
-//      return join(l, r, o);
-//    }
-//  }
-
 
   // TODO: move both of the following fns to a better location.
   // templatized version of inc_if
