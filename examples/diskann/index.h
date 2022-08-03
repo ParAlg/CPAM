@@ -154,6 +154,7 @@ struct knn_index {
     consolidate_deletes_simple(old_delete_set);
     remove_deleted_vertices(delete_vec);
     check_deletes_correct(old_delete_set);
+    // check_for_zero_deg(old_delete_set);
   }
 
  private:
@@ -224,15 +225,6 @@ struct knn_index {
           return true;
         };
         current_vtx.out_neighbors().foreach_cond(h);
-        // for(auto cand : candidates){
-        //   if(old_delete_set.find(cand) != old_delete_set.end()){
-        //     std::cout << "ERROR: after assembling candidate list, " <<
-        //     std::endl;
-        //     std::cout << "vertex " << index << " candidate list contains
-        //     deleted neighbor "
-        //       << cand << std::endl;
-        //   }
-        // }
         if (change) {
           needs_consolidate[i] = true;
           if (candidates.size() <= maxDeg) {
@@ -248,15 +240,6 @@ struct knn_index {
             robustPrune(v[index], index, candidates, alpha, output_slice,
                         false);
             size_t deg = size_of(output_slice);
-            // for(size_t j=0; j<deg; j++){
-            //   if(old_delete_set.find(new_out_2[j]) != old_delete_set.end()){
-            //     std::cout << "ERROR: after pruning candidate list, " <<
-            //     std::endl;
-            //     std::cout << "vertex " << index << " candidate list contains
-            //     deleted neighbor "
-            //       << new_out_2[j] << std::endl;
-            //   }
-            // }
             auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
             auto tree = edge_tree(begin, begin + deg);
             consolidated_vertices[i] = {index, tree.root};
@@ -267,21 +250,8 @@ struct knn_index {
         }
       }
     });
-    // auto vtx = G.get_vertex(1348);
-    // auto f = [&] (node_id v, node_id u, empty_weight wgh){
-    //   std::cout << u << std::endl;
-    //   return true;
-    // };
-    // std::cout << "before" << std::endl;
-    // vtx.out_neighbors().foreach_cond(f);
     auto filtered_vertices =
         parlay::pack(consolidated_vertices, needs_consolidate);
-    // std::cout << filtered_vertices.size() << std::endl;
-    // for(auto fv : filtered_vertices){if(get<0>(fv) == 1348) std::cout <<
-    // "HERE" << std::endl;}
-    // std::cout << std::endl;
-    // std::cout << "after" << std::endl;
-    // vtx.out_neighbors().foreach_cond(f);
     G.insert_vertices_batch(filtered_vertices.size(),
                             filtered_vertices.begin());
   }
@@ -306,6 +276,18 @@ struct knn_index {
           return true;
         };
         current_vtx.out_neighbors().foreach_cond(f);
+      }
+    });
+  }
+
+  void check_for_zero_deg(std::set<node_id> &old_delete_set){
+    parlay::parallel_for(0, v.size(), [&] (size_t i){
+      if(old_delete_set.find(i) == old_delete_set.end()){
+        auto current_vtx = G.get_vertex(i);
+        int count = 0;
+        auto f = [&] (node_id u, node_id v, empty_weight wgh) {count++; return true;};
+        current_vtx.out_neighbors().foreach_cond(f);
+        if(count == 0) std::cout << "Vertex " << i << " has degree zero after deletions" << std::endl;
       }
     });
   }
@@ -390,7 +372,6 @@ struct knn_index {
                    parlay::slice<node_id*, node_id*> new_nghs,
                    bool add = true) {
     auto less = [&](pid a, pid b) { return a.second < b.second; };
-
     // add out neighbors of p to the candidate set.
     if (add) {
       auto p_vertex = G.get_vertex(p_id);
@@ -402,10 +383,15 @@ struct knn_index {
       };
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
-
     if (candidates.size() <= maxDeg) {
+      // std::cout << "here1" << std::endl;
       uint32_t offset = 0;
+      // std::cout << candidates.size() << std::endl; 
+      // for(auto cand : candidates){
+      //   std::cout << cand.first << " , " << cand.second << std::endl; 
+      // }
       parlay::sort_inplace(candidates, less);
+      // std::cout << "here2" << std::endl; 
       for (size_t i = 0; i < candidates.size(); ++i) {
         node_id ngh = candidates[i].first;
         if (ngh != p_id && (i == 0 || ngh != candidates[i - 1].first)) {
@@ -413,15 +399,16 @@ struct knn_index {
           offset++;
         }
       }
+      // std::cout << "END" << std::endl;
       return;
     }
-
     // Sort the candidate set in reverse order according to distance from p.
     parlay::sort_inplace(candidates, less);
 
     size_t num_new = 0;
 
     size_t candidate_idx = 0;
+
     while (num_new <= maxDeg && candidate_idx < candidates.size()) {
       // Don't need to do modifications.
       node_id p_star = candidates[candidate_idx].first;
@@ -571,12 +558,12 @@ struct knn_index {
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
         // std::cout << "here2" << std::endl;
         robustPrune(v[index], index, candidates, alpha, output_slice);
-        // std::cout << "here2" << std::endl;
-        size_t deg = size_of(output_slice);
         // std::cout << "here3" << std::endl;
+        size_t deg = size_of(output_slice);
+        // std::cout << "here4" << std::endl;
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
-        // std::cout << "here4" << std::endl;
+        // std::cout << "here5" << std::endl;
         reverse_KVs[j] = {index, tree.root};
         tree.root = nullptr;
       });
