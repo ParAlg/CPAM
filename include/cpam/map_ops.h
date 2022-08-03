@@ -224,6 +224,8 @@ struct map_ops : Seq {
     else Entry::set_val(re, op(Entry::get_val(re), Entry::get_val(e)));
   }
 
+  // a is the root, e is the new (incoming value), rev=false
+  // combine(old, new)
   template <class BinaryOp>
   static inline void combine_values(node* a, ET e, bool reverse, const BinaryOp& op) {
 //    ET& re = Seq::get_entry(a);
@@ -1539,7 +1541,7 @@ struct map_ops : Seq {
       } else {
         parlay::move_uninitialized(output[out_off], stack[i]);
         ET& re = output[out_off];
-        Entry::set_val(re, op(Entry::get_val(A[j]), Entry::get_val(re)));
+        Entry::set_val(re, op(Entry::get_val(re), Entry::get_val(A[j])));
         out_off++;
         i++;
         j++;

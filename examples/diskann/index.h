@@ -5,7 +5,7 @@
 // using namespace cpam;
 #include <pam/get_time.h>
 #include <pam/parse_command_line.h>
-#include "../graphs/aspen/aspen.h"  
+#include "../graphs/aspen/aspen.h"
 #include "types.h"
 #include "util/NSGDist.h"
 #include "util/counter.h"
@@ -164,9 +164,9 @@ struct knn_index {
   // d: dimensionality of the indexed vectors
 
   void consolidate_deletes_simple(std::set<node_id> old_delete_set){
-    auto consolidated_vertices = 
+    auto consolidated_vertices =
       parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
-    
+
     parlay::parallel_for(0, v.size(), [&] (size_t i) {
       if(old_delete_set.find(i) == old_delete_set.end()){
         auto current_vtx = G.get_vertex(i);
@@ -187,9 +187,9 @@ struct knn_index {
   }
 
 
-  void consolidate_deletes_internal(std::set<node_id> old_delete_set, 
+  void consolidate_deletes_internal(std::set<node_id> old_delete_set,
     parlay::sequence<node_id> &to_consolidate){
-    auto consolidated_vertices = 
+    auto consolidated_vertices =
       parlay::sequence<std::tuple<node_id, edge_node*>>(to_consolidate.size());
     std::vector<bool> needs_consolidate(to_consolidate.size(), false);
 
@@ -220,10 +220,10 @@ struct knn_index {
         // for(auto cand : candidates){
         //   if(old_delete_set.find(cand) != old_delete_set.end()){
         //     std::cout << "ERROR: after assembling candidate list, " << std::endl;
-        //     std::cout << "vertex " << index << " candidate list contains deleted neighbor " 
+        //     std::cout << "vertex " << index << " candidate list contains deleted neighbor "
         //       << cand << std::endl;
         //   }
-        // }  
+        // }
         if(change){
           needs_consolidate[i] = true;
           if(candidates.size() <= maxDeg){
@@ -240,7 +240,7 @@ struct knn_index {
             // for(size_t j=0; j<deg; j++){
             //   if(old_delete_set.find(new_out_2[j]) != old_delete_set.end()){
             //     std::cout << "ERROR: after pruning candidate list, " << std::endl;
-            //     std::cout << "vertex " << index << " candidate list contains deleted neighbor " 
+            //     std::cout << "vertex " << index << " candidate list contains deleted neighbor "
             //       << new_out_2[j] << std::endl;
             //   }
             // }
@@ -254,7 +254,7 @@ struct knn_index {
     });
     // auto vtx = G.get_vertex(1348);
     // auto f = [&] (node_id v, node_id u, empty_weight wgh){
-    //   std::cout << u << std::endl; 
+    //   std::cout << u << std::endl;
     //   return true;
     // };
     // std::cout << "before" << std::endl;
@@ -263,7 +263,7 @@ struct knn_index {
     // std::cout << filtered_vertices.size() << std::endl;
     // for(auto fv : filtered_vertices){if(get<0>(fv) == 1348) std::cout << "HERE" << std::endl;}
     // std::cout << std::endl;
-    // std::cout << "after" << std::endl; 
+    // std::cout << "after" << std::endl;
     // vtx.out_neighbors().foreach_cond(f);
     G.insert_vertices_batch(filtered_vertices.size(), filtered_vertices.begin());
   }
@@ -282,7 +282,7 @@ struct knn_index {
         parlay::sequence<node_id> remaining_nbh;
         auto f = [&](node_id u, node_id v, empty_weight wgh) {
           if (g(v)) {
-            std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v << std::endl; 
+            std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v << std::endl;
           }
           return true;
         };
@@ -538,7 +538,7 @@ struct knn_index {
       auto reverse_KVs =
           parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
 
-      std::cout << "Number of in-neighbors: " << grouped_by.size() << std::endl; 
+      std::cout << "Number of in-neighbors: " << grouped_by.size() << std::endl;
       // finally, add the bidirectional edges; if they do not make
       // the vertex exceed the degree bound, just add them to out_nbhs;
       // otherwise, use robustPrune on the vertex with user-specified alpha
@@ -552,12 +552,12 @@ struct knn_index {
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
         // std::cout << "here2" << std::endl;
         robustPrune(v[index], index, candidates, alpha, output_slice);
-        // std::cout << "here2" << std::endl; 
+        // std::cout << "here2" << std::endl;
         size_t deg = size_of(output_slice);
         // std::cout << "here3" << std::endl;
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
-        // std::cout << "here4" << std::endl; 
+        // std::cout << "here4" << std::endl;
         reverse_KVs[j] = {index, tree.root};
         tree.root = nullptr;
       });
