@@ -36,18 +36,6 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     I.build_index(parlay::tabulate(
         v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
     build_t.next("Build time");
-    int parts = 20;
-    size_t m = v.size()/parts;
-    for(int i=0; i<20; i++){
-      parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
-      std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
-      I.lazy_delete(indices);
-      I.consolidate_deletes();
-      I.print_graph_status();
-      std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
-      I.insert(indices);
-      I.print_graph_status();
-    }
   };
 }
 
@@ -63,12 +51,13 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     findex I(v, maxDeg, beamSize, alpha, d);
     I.build_index(parlay::tabulate( v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
 
-
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;
     parlay::parallel_for(0, q.size(), [&](size_t i) {
       query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
     });
+
+   
 
     if (outFile != NULL) {
       size_t m = q.size() * (k + 1);
@@ -114,7 +103,6 @@ void timeNeighbors(parlay::sequence<Tvec_point<T>>& pts, int rounds, int maxDeg,
       parlay::tabulate(n, [&](size_t i) -> Tvec_point<T>* { return &pts[i]; });
 
   if (queries.size() != 0) {
-    std::cout << "here" << std::endl;
     auto q = parlay::tabulate(queries.size(), [&](size_t i) -> Tvec_point<T>* {
       return &queries[i];
     });

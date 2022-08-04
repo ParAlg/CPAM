@@ -397,7 +397,9 @@ struct knn_index {
       // for(auto cand : candidates){
       //   std::cout << cand.first << " , " << cand.second << std::endl; 
       // }
+      // std::cout << "here1" << std::endl;
       parlay::sort_inplace(candidates, less);
+      // std::cout << "here2" << std::endl; 
       // std::cout << "here2" << std::endl; 
       for (size_t i = 0; i < candidates.size(); ++i) {
         node_id ngh = candidates[i].first;
@@ -493,8 +495,8 @@ struct knn_index {
       floor = ceiling;
       ceiling = std::min({m, size_t(floor * base) + 1, floor + max_batch_size});
 
-      std::cout << "Start of batch insertion round: ceiling = " << ceiling
-                << " floor = " << floor << std::endl;
+      // std::cout << "Start of batch insertion round: ceiling = " << ceiling
+      //           << " floor = " << floor << std::endl;
 
       parlay::sequence<node_id> new_out = parlay::sequence<node_id>(
           maxDeg * (ceiling - floor), std::numeric_limits<node_id>::max());
@@ -543,15 +545,15 @@ struct knn_index {
       });
 
       G.insert_vertices_batch(KVs.size(), KVs.begin());
-      std::cout << "After inserts, G.num_vertices() (max node_id) = "
-                << G.num_vertices() << std::endl;
+      // std::cout << "After inserts, G.num_vertices() (max node_id) = "
+      //           << G.num_vertices() << std::endl;
 
       // TODO: update the code below:
       auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
       auto reverse_KVs =
           parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
 
-      std::cout << "Number of in-neighbors: " << grouped_by.size() << std::endl;
+      // std::cout << "Number of in-neighbors: " << grouped_by.size() << std::endl;
       // finally, add the bidirectional edges; if they do not make
       // the vertex exceed the degree bound, just add them to out_nbhs;
       // otherwise, use robustPrune on the vertex with user-specified alpha
@@ -575,7 +577,7 @@ struct knn_index {
         tree.root = nullptr;
       });
 
-      std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+      // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
     }
   }
