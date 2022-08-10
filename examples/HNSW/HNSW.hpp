@@ -37,10 +37,6 @@ enum class type_metric{
 	L2, ANGULAR, DOT
 };
 
-struct point{
-	float x, y;
-};
-
 template<typename U, template<typename> class Allocator=std::allocator>
 class HNSW
 {
@@ -145,21 +141,12 @@ public:
 		}
 	}
 
-	// node* insert(const T &q, uint32_t id);
 	template<typename Iter>
 	void insert(Iter begin, Iter end, bool from_blank);
 
 	template<typename Queue>
 	void select_neighbors_simple_impl(const T &u, Queue &C, uint32_t M)
 	{
-		/*
-		list res;
-		for(uint32_t i=0; i<M; ++i)
-		{
-			res.insert(C.pop_front());
-		}
-		return res;
-		*/
 		(void)u;
 		std::vector<typename Queue::value_type> tie;
 		float dist_tie = 1e20;
@@ -188,20 +175,8 @@ public:
 	auto select_neighbors_simple(const T &u, const Queue &C, uint32_t M)
 	{
 		// The parameter C is intended to be copy constructed
-		/*
-		select_neighbors_simple_impl(u, C, M);
-		return C;
-		*/
 		auto R = parlay::sort(C, farthest());
 		if(R.size()>M) R.resize(M);
-		/*
-		uint32_t size_R = std::min(C.size(),M);
-		std::vector<node*> R;
-		R.reserve(size_R);
-		for(const auto &e : C)
-			R.push_back(e.u);
-		*/
-
 		return R;
 	}
 
@@ -211,15 +186,10 @@ public:
 		const parlay::sequence<dist> &C, uint32_t M,
 		uint32_t level, bool extendCandidate, bool keepPrunedConnections)
 	{
-		(void)extendCandidate;
-
-		// std::priority_queue<dist,std::vector<dist>,farthest> C_cp=C, W_d;
 		parlay::sequence<dist> W_d;
 		std::set<dist,cmp_id> W_tmp;
-		// while(!C_cp.empty())
 		for(auto &e : C) // TODO: add const?
 		{
-			// auto &e = C_cp.top();
 			W_tmp.insert(e);
 			if(extendCandidate)
 			{
@@ -230,33 +200,24 @@ public:
 						W_tmp.insert(dist{U::distance(e_adj->data,u,dim),e_adj});
 				}
 			}
-			// C_cp.pop();
 		}
 
-		// std::priority_queue<dist,std::vector<dist>,nearest> W;
 		parlay::sequence<dist> W(W_tmp.begin(), W_tmp.end());
 		std::sort(W.begin(), W.end(), farthest());
-		/*
-		for(auto &e : W_tmp)
-			W.push(e);
-		*/
 		W_tmp.clear();
 
 		std::vector<node*> R;
-		// while(W.size()>0 && R.size()<M)
 		for(const auto &e : W)
 		{
 			if(R.size()>=M) break;
-			// const auto e = W.top();
-			// W.pop();
 			const auto d_q = e.d;
 
 			bool is_good = true;
 			for(const auto &r : R)
 			{
 				const auto d_r = U::distance(e.u->data, r->data, dim);
-				//if(d_r*(level+1)>d_q*alpha*(entrance->level+1))
-				if(d_r<d_q)
+				//if(d_r*(level+1)<d_q*alpha*(entrance->level+1))
+				if(d_r<d_q*alpha)
 				{
 					is_good = false;
 					break;
@@ -269,25 +230,14 @@ public:
 				W_d.push_back(e);
 		}
 
-		// std::sort(W_d.begin(), W_d.end(), nearest());
+		// elements in `W_d` are in order
 		auto it = W_d.begin();
-		// std::priority_queue<dist,std::vector<dist>,farthest> res;
-		auto &res = R;
-		/*
-		for(const auto &r : R)
-		{
-			res.push({U::distance(u,r->data,dim), r});
-		}
-		*/
 		if(keepPrunedConnections)
 		{
-			// while(W_d.size()>0 && res.size()<M)
-				// res.push(W_d.top()), W_d.pop();
-			while(it!=W_d.end() && res.size()<M)
-				// res.push(*(it++));
-				res.push_back((it++)->u);
+			while(it!=W_d.end() && R.size()<M)
+				R.push_back((it++)->u);
 		}
-		return res;
+		return R;
 	}
 
 	auto select_neighbors(const T &u, 
@@ -321,9 +271,9 @@ public:
 		return level==0? m*2: m;
 	}
 
-	void fix_edge()
+	void symmetrize_edge()
 	{
-		fprintf(stderr, "Start fixing edges...\n");
+		fprintf(stderr, "Start to symmetrize edges...\n");
 
 		for(int32_t l_c=entrance[0]->level; l_c>=0; --l_c)
 		{
@@ -511,11 +461,6 @@ HNSW<T,Allocator>::HNSW(Iter begin, Iter end, uint32_t dim_, float m_l_, uint32_
 	{
 		batch_begin = batch_end;
 		batch_end = std::min({n, (uint32_t)std::ceil(batch_begin*batch_base), batch_begin+20000});
-		/*
-		if(batch_end>batch_begin+100)
-			batch_end = batch_begin+100;
-		*/
-		// batch_end = batch_begin+1;
 
 		insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, true);
 		// insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
@@ -533,7 +478,7 @@ HNSW<T,Allocator>::HNSW(Iter begin, Iter end, uint32_t dim_, float m_l_, uint32_
 	fprintf(stderr, "# visited: %lu\n", total_visited.load());
 	fprintf(stderr, "# eval: %lu\n", total_eval.load());
 	fprintf(stderr, "size of C: %lu\n", total_size_C.load());
-	if(do_fixing) fix_edge();
+	if(do_fixing) symmetrize_edge();
 
 	#if 0
 		for(const auto *pu : node_pool)
@@ -615,35 +560,15 @@ void HNSW<U,Allocator>::insert(Iter begin, Iter end, bool from_blank)
 			auto res = search_layer(u, eps_u, ef_construction, l_c);
 			auto neighbors_vec = select_neighbors(u.data, res, get_threshold_m(l_c)*factor_m, l_c);
 			// move the content from `neighbors_vec` to `u.neighbors[l_c]`
-			// auto &nbh_u = nbh_new[i];
 			auto &edge_u = edge_add[i];
-			// nbh_u.clear();
 			edge_u.clear();
-			// nbh_u.reserve(neighbors_vec.size());
 			edge_u.reserve(neighbors_vec.size());
-			/*
-			for(uint32_t j=0; neighbors_vec.size()>0; ++j)
-			{
-				auto *pv = neighbors_vec.top().u;
-				neighbors_vec.pop();
-				// nbh_u[j] = pv;
-				// edge_u[j] = std::make_pair(pv, &u);
-				nbh_u.push_back(pv);
-				edge_u.emplace_back(pv, &u);
-			}
-			*/
+
 			for(auto *pv : neighbors_vec)
 				edge_u.emplace_back(pv, &u);
 			nbh_new[i] = std::move(neighbors_vec);
 
 			eps_u.clear();
-			/*
-			while(res.size()>0)
-			{
-				eps_u.push_back(res.top().u); // TODO: optimize
-				res.pop();
-			}
-			*/
 			eps_u.reserve(res.size());
 			for(const auto e : res)
 				eps_u.push_back(e.u);
@@ -723,8 +648,6 @@ auto HNSW<U,Allocator>::search_layer(const node &u, const std::vector<node*> &ep
 {
 	debug_output("begin search layer\n");
 	auto W_ex = search_layer_ex(u, eps, ef, l_c);
-	// auto W_ex = beam_search_ex(u, eps, ef, l_c);
-	// std::priority_queue<dist,std::vector<dist>,farthest> W;
 	parlay::sequence<dist> W(W_ex.begin(), W_ex.end());
 	debug_output("end search layer\n");
 	return W;
