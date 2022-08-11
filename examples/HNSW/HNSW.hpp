@@ -456,11 +456,17 @@ HNSW<T,Allocator>::HNSW(Iter begin, Iter end, uint32_t dim_, float m_l_, uint32_
 	entrance.push_back(entrance_init);
 
 	uint32_t batch_begin=0, batch_end=1;
+	const uint32_t batch_size_min = 1;
+	const uint32_t batch_size_max = 20000;
 	float progress = 0.0;
 	while(batch_end<n)
 	{
 		batch_begin = batch_end;
-		batch_end = std::min({n, (uint32_t)std::ceil(batch_begin*batch_base), batch_begin+20000});
+		batch_end = std::min({
+			n,
+			(uint32_t)std::ceil(batch_begin*batch_base)+batch_size_min, 
+			batch_begin+batch_size_max
+		});
 
 		insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, true);
 		// insert(rand_seq.begin()+batch_begin, rand_seq.begin()+batch_end, false);
