@@ -28,7 +28,7 @@
 #if DEBUG_OUTPUT
 #define debug_output(...) fprintf(stderr, __VA_ARGS__)
 #else
-#define debug_output(...) do{__VA_ARGS__;}while(0)
+#define debug_output(...) do{[](...){}(__VA_ARGS__);}while(0)
 #endif // DEBUG_OUTPUT
 
 namespace ANN{
