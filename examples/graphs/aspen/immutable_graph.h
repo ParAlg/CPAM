@@ -358,7 +358,7 @@ struct symmetric_graph {
   // m : number of edges
   // edges: pairs of edges to insert. Currently working with undirected graphs;
   template <class VtxEntry>
-  void insert_vertices_batch(size_t m, VtxEntry* E) {
+  void insert_vertices_batch(size_t m, VtxEntry* E, bool functional = false) {
     timer pt("Insert", false);
     timer t("Insert", false);
     auto E_slice = parlay::make_slice(E, E + m);
@@ -372,19 +372,20 @@ struct symmetric_graph {
       t.root = cur;  // Lets the ref-cnt get decremented here.
       return inc;
     };
-    V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
+    if(functional) V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
+    else V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
   }
 
   // m : number of vertices to delete
   // D : array of the deleted vertex ids
-  void delete_vertices_batch(size_t m, vertex_id* D) {
+  void delete_vertices_batch(size_t m, vertex_id* D, bool functional = false) {
     timer pt("Insert", false);
     timer t("Insert", false);
     auto D_slice = parlay::make_slice(D, D + m);
     auto key_less = std::less<vertex_id>();
     parlay::sort_inplace(D_slice, key_less);
-
-    V = vertex_tree::multi_delete_sorted(std::move(V), D_slice);
+    if(functional) V = vertex_tree::multi_delete_sorted(V, D_slice);
+    else V = vertex_tree::multi_delete_sorted(std::move(V), D_slice);
   }
 
   // Trying different versions of batch insert:

@@ -90,11 +90,11 @@ struct knn_index {
   void insert(node_id p) {
     parlay::sequence<node_id> inserts;
     inserts.push_back(p);
-    batch_insert(inserts, 2, .02, false);
+    batch_insert(inserts, 2, .02, false, true);
   }
 
   void insert(parlay::sequence<node_id> inserts, bool random_order = false) {
-    batch_insert(inserts, 2, .02, random_order);
+    batch_insert(inserts, 2, .02, random_order, true);
   }
 
   parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
@@ -183,7 +183,7 @@ struct knn_index {
       }
     });
     G.insert_vertices_batch(consolidated_vertices.size(),
-                            consolidated_vertices.begin());
+                            consolidated_vertices.begin(), true);
   }
 
   void consolidate_deletes_internal(std::set<node_id> old_delete_set,
@@ -246,11 +246,11 @@ struct knn_index {
     auto filtered_vertices =
         parlay::pack(consolidated_vertices, needs_consolidate);
     G.insert_vertices_batch(filtered_vertices.size(),
-                            filtered_vertices.begin());
+                            filtered_vertices.begin(), true);
   }
 
   void remove_deleted_vertices(parlay::sequence<node_id>& delete_vec) {
-    G.delete_vertices_batch(delete_vec.size(), delete_vec.begin());
+    G.delete_vertices_batch(delete_vec.size(), delete_vec.begin(), false);
   }
 
   void check_deletes_correct(std::set<node_id>& old_delete_set) {
@@ -452,7 +452,8 @@ struct knn_index {
   }
 
   void batch_insert(parlay::sequence<node_id>& inserts, double base = 2,
-                    double max_fraction = .02, bool random_order = true) {
+                    double max_fraction = .02, bool random_order = true,
+                    bool functional = false) {
     size_t n = v.size();
     size_t m = inserts.size();
     size_t max_batch_size = static_cast<size_t>(std::ceil(max_fraction * n));
@@ -521,7 +522,7 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
-      G.insert_vertices_batch(KVs.size(), KVs.begin());
+      G.insert_vertices_batch(KVs.size(), KVs.begin(), functional);
       // std::cout << "After inserts, G.num_vertices() (max node_id) = "
       //           << G.num_vertices() << std::endl;
 
@@ -551,7 +552,7 @@ struct knn_index {
       });
 
       // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
-      G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
+      G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin(), functional);
     }
   }
 

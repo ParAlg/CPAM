@@ -46,6 +46,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
       std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
       I.insert(indices);
     }
+    build_t.next("Finished rebuilding");
   };
 }
 
@@ -55,12 +56,14 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
          parlay::sequence<Tvec_point<T>*> q, char* outFile) {
   parlay::internal::timer t("ANN", report_stats);
   {
+    timer build_t;
     unsigned d = (v[0]->coordinates).size();
     std::cout << "Size of dataset: " << v.size() << std::endl;
     using findex = knn_index<T>;
     findex I(v, maxDeg, beamSize, alpha, d);
+    build_t.start();
     I.build_index(parlay::tabulate( v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
-
+    build_t.next("Built index");
     int parts = 20;
     size_t m = v.size()/parts;
     for(int i=0; i<20; i++){
@@ -71,6 +74,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
       std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
       I.insert(indices);
     }
+    build_t.next("Finished rebuilding");
 
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Built index, now performing queries" << std::endl;
