@@ -2,7 +2,6 @@
 
 #include <cpam/cpam.h>
 #include <pam/pam.h>
-// using namespace cpam;
 #include <pam/get_time.h>
 #include <pam/parse_command_line.h>
 #include "../graphs/aspen/aspen.h"
@@ -148,13 +147,9 @@ struct knn_index {
     for (auto d : delete_set) delete_vec.push_back(d);
     std::set<unsigned> old_delete_set;
     delete_set.swap(old_delete_set);
-    // auto to_consolidate = parlay::tabulate(v.size(), [&] (node_id i) {return
-    // i;});
-    // consolidate_deletes_internal(old_delete_set, to_consolidate);
     consolidate_deletes_simple(old_delete_set);
     remove_deleted_vertices(delete_vec);
     check_deletes_correct(old_delete_set);
-    // check_for_zero_deg(old_delete_set);
   }
 
  private:
@@ -225,15 +220,6 @@ struct knn_index {
           return true;
         };
         bool ret = current_vtx.out_neighbors().foreach_cond(h);
-        // for(auto cand : candidates){
-        //   if(old_delete_set.find(cand) != old_delete_set.end()){
-        //     std::cout << "ERROR: after assembling candidate list, " <<
-        //     std::endl;
-        //     std::cout << "vertex " << index << " candidate list contains
-        //     deleted neighbor "
-        //       << cand << std::endl;
-        //   }
-        // }
         if (change && ret) {
           needs_consolidate[i] = true;
           if (candidates.size() <= maxDeg) {
@@ -321,7 +307,7 @@ struct knn_index {
     frontier.push_back(make_pid(medoid->id));
 
     std::vector<pid> unvisited_frontier(beamSize);
-    parlay::sequence<pid> new_frontier(2 * beamSize);
+    parlay::sequence<pid> new_frontier(beamSize + maxDeg);
     unvisited_frontier[0] = frontier[0];
     bool not_done = true;
 
@@ -391,16 +377,8 @@ struct knn_index {
       p_vertex.out_neighbors().foreach_cond(map_f);
     }
     if (candidates.size() <= maxDeg) {
-      // std::cout << "here1" << std::endl;
       uint32_t offset = 0;
-      // std::cout << candidates.size() << std::endl; 
-      // for(auto cand : candidates){
-      //   std::cout << cand.first << " , " << cand.second << std::endl; 
-      // }
-      // std::cout << "here1" << std::endl;
       parlay::sort_inplace(candidates, less);
-      // std::cout << "here2" << std::endl; 
-      // std::cout << "here2" << std::endl; 
       for (size_t i = 0; i < candidates.size(); ++i) {
         node_id ngh = candidates[i].first;
         if (ngh != p_id && (i == 0 || ngh != candidates[i - 1].first)) {
@@ -408,7 +386,6 @@ struct knn_index {
           offset++;
         }
       }
-      // std::cout << "END" << std::endl;
       return;
     }
     // Sort the candidate set in reverse order according to distance from p.
@@ -565,14 +542,10 @@ struct knn_index {
             maxDeg, std::numeric_limits<node_id>::max());
         auto output_slice =
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-        // std::cout << "here2" << std::endl;
         robustPrune(v[index], index, candidates, alpha, output_slice);
-        // std::cout << "here3" << std::endl;
         size_t deg = size_of(output_slice);
-        // std::cout << "here4" << std::endl;
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
-        // std::cout << "here5" << std::endl;
         reverse_KVs[j] = {index, tree.root};
         tree.root = nullptr;
       });
