@@ -215,7 +215,7 @@ struct symmetric_graph {
 
   size_t num_edges() const { return V.aug_val().second; }
 
-  vertex get_vertex(vertex_id v) {
+  vertex get_vertex(vertex_id v) const{
     auto opt = V.find(v);
     if (opt.has_value()) {
       const auto& in_opt = *opt;

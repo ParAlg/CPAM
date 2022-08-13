@@ -7,9 +7,9 @@ class descr_fvec
 {
 public:
 	typedef fvec type_point;
-	static float distance(const type_point &u, const type_point &v, uint32_t dim)
+	static float distance(const type_point *u, const type_point *v, uint32_t dim)
 	{
-		const auto &uc=u.coord, &vc=v.coord;
+		const auto &uc=u->coord, &vc=v->coord;
 		float dot=0, nu=0, nv=0;
 		for(uint32_t i=0; i<dim; ++i)
 		{
