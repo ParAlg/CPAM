@@ -229,6 +229,7 @@ public:
 	}
 
 	auto search_layer(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const; // To static
+	auto search_layer_beam(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const; // To static
 	auto get_threshold_m(uint32_t level){
 		return level==0? m*2: m;
 	}
@@ -361,7 +362,7 @@ void HNSW<U,Allocator>::insert(Iter begin, Iter end, bool from_blank)
 	auto index = parlay::delayed_seq<size_t>(size_batch, [&](size_t i){
 		return i;
 	});
-	auto is_distinct = parlay::delayed_seq<size_t>(size_batch, [&](size_t i){
+	auto is_distinct = parlay::delayed_seq<bool>(size_batch, [&](size_t i){
 		return level[node_new[i]]!=level[node_new[i+1]];
 	});
 	node_new[size_batch] = node_new[size_batch-1];
@@ -513,14 +514,20 @@ void HNSW<U,Allocator>::insert(Iter begin, Iter end, bool from_blank)
 	// finally, update the entrances
 
 	if(level_max>level_ep)
+	{
+		debug_output("Prompt the ep_level to %u\n", level_max);
 		entrance.clear();
+	}
 
 	if(level_max>=level_ep)
-		entrance.insert(entrance.end(), node_new.get(), node_new.get()+size_batch);
+	{
+		debug_output("Insert %lu nodes to the top level\n", pos_split[0]+1);
+		entrance.insert(entrance.end(), node_new.get(), node_new.get()+pos_split[0]+1);
+	}
 }
 
 template<typename U, template<typename> class Allocator>
-auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const
+auto HNSW<U,Allocator>::search_layer_beam(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const
 {
 	// std::vector<bool> visited(n);
 	// TODO: Try hash to an array
@@ -621,6 +628,68 @@ auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id>
 	if(W.size()>ef) W.resize(ef);
 	*/
 	return W_;
+}
+
+template<typename U, template<typename> class Allocator>
+auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const
+{
+	// std::vector<bool> visited(n);
+	// TODO: Try hash to an array
+	// TODO: monitor the size of `visited`
+	std::set<uint32_t> visited;
+	parlay::sequence<dist> C, W;
+	uint32_t cnt_used = 0;
+
+	for(node_id ep : eps)
+	{
+		// visited[ep] = true;
+		visited.insert(ep);
+		const auto d = U::distance(pointset[u],pointset[ep],dim);
+		C.push_back({d,ep});
+		W.push_back({d,ep});
+	}
+	std::make_heap(C.begin(), C.end(), nearest());
+	std::make_heap(W.begin(), W.end(), farthest());
+
+	while(C.size()>0)
+	{
+		if(C[0].d>W[0].d) break;
+		
+		const node_id c = C[0].u;
+		std::pop_heap(C.begin(), C.end(), nearest());
+		C.pop_back();
+
+		for(node_id v: neighbourhood(c, l_c))
+		{
+			// if(visited[v]) continue;
+			// visited[v] = true;
+			if(!visited.insert(v).second) continue;
+			const auto d = U::distance(pointset[u],pointset[v],dim);
+			if(W.size()<ef||d<W[0].d)
+			{
+				C.push_back({d,v});
+				std::push_heap(C.begin(), C.end(), nearest());
+				
+				W.push_back({d,v});
+				std::push_heap(W.begin(), W.end(), farthest());
+				if(W.size()>ef)
+				{
+					std::pop_heap(W.begin(), W.end(), farthest());
+					W.pop_back();
+				}
+			}
+		}
+	}
+	if(l_c==0)
+	{
+		total_visited += visited.size();
+		total_size_C += C.size();
+	}
+	/*
+	std::sort(W.begin(), W.end(), farthest());
+	if(W.size()>ef) W.resize(ef);
+	*/
+	return W;
 }
 
 template<typename U, template<typename> class Allocator>
