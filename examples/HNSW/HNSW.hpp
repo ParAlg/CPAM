@@ -45,6 +45,8 @@ template<typename U, template<typename> class Allocator=std::allocator>
 class HNSW
 {
 	using T = typename U::type_point;
+	typedef uint32_t node_id;
+
 	struct empty_weight{};
 	using Graph = aspen::symmetric_graph<empty_weight>;
 	using edge_tree = typename Graph::edge_tree;
@@ -65,12 +67,24 @@ public:
 	template<typename Iter>
 	HNSW(Iter begin, Iter end, uint32_t dim, float m_l=1, uint32_t m=100, uint32_t ef_construction=50, float alpha=5, float batch_base=2, bool do_fixing=false);
 
+	/*
+		Construct from the saved model
+		getter(i) returns a reference to the point (convertible to type const T&) 
+		of which the ID is `i`
+	*/
+	template<typename Getter>
+	HNSW(const std::string &filename_model, Getter getter);
+
 	// save the current model to a file
 	void save(const std::string &filename_model) const;
-public:
-	typedef uint32_t node_id;
 
-	
+	/*
+		Search for the `k`-nearest neighbors around the point `q`, with the candidate(beam) size `ef`
+		For each found neighbor u, return a pair (u's ID, distance from u to `q`)
+		There is no guarantee on the order of the returned pairs
+	*/
+	parlay::sequence<std::pair<node_id,float>> search(const T &q, uint32_t k, uint32_t ef);
+public:
 	struct node_orignal{
 		// uint32_t id;
 		uint32_t level;
@@ -228,7 +242,7 @@ public:
 		return res;
 	}
 
-	auto search_layer(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const; // To static
+	auto search_layer(const T &q, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const; // To static
 	auto search_layer_beam(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const; // To static
 	auto get_threshold_m(uint32_t level){
 		return level==0? m*2: m;
@@ -384,7 +398,7 @@ void HNSW<U,Allocator>::insert(Iter begin, Iter end, bool from_blank)
 		eps_u = entrance;
 		for(uint32_t l=level_ep; l>level_u; --l)
 		{
-			const auto res = search_layer(u, eps_u, 1, l); // TODO: optimize
+			const auto res = search_layer(*pointset[u], eps_u, 1, l); // TODO: optimize
 			eps_u.clear();
 			eps_u.push_back(res[0].u);
 		}
@@ -425,7 +439,7 @@ void HNSW<U,Allocator>::insert(Iter begin, Iter end, bool from_blank)
 			const node_id u = node_new[i];
 
 			auto &eps_u = eps[i];
-			auto res = search_layer(u, eps_u, ef_construction, l);
+			auto res = search_layer(*pointset[u], eps_u, ef_construction, l);
 			auto nbh_u = select_neighbors(pointset[u], res, get_threshold_m(l)*factor_m, l);
 			// move the content from `nbh_u` to `u.neighbors[l]`
 			auto &edge_u = edge_add[i];
@@ -631,7 +645,7 @@ auto HNSW<U,Allocator>::search_layer_beam(const node_id u, const std::vector<nod
 }
 
 template<typename U, template<typename> class Allocator>
-auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const
+auto HNSW<U,Allocator>::search_layer(const T &q, const std::vector<node_id> &eps, uint32_t ef, uint32_t l_c) const
 {
 	// std::vector<bool> visited(n);
 	// TODO: Try hash to an array
@@ -644,7 +658,7 @@ auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id>
 	{
 		// visited[ep] = true;
 		visited.insert(ep);
-		const auto d = U::distance(pointset[u],pointset[ep],dim);
+		const auto d = U::distance(&q,pointset[ep],dim);
 		C.push_back({d,ep});
 		W.push_back({d,ep});
 	}
@@ -664,7 +678,7 @@ auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id>
 			// if(visited[v]) continue;
 			// visited[v] = true;
 			if(!visited.insert(v).second) continue;
-			const auto d = U::distance(pointset[u],pointset[v],dim);
+			const auto d = U::distance(&q,pointset[v],dim);
 			if(W.size()<ef||d<W[0].d)
 			{
 				C.push_back({d,v});
@@ -690,6 +704,154 @@ auto HNSW<U,Allocator>::search_layer(const node_id u, const std::vector<node_id>
 	if(W.size()>ef) W.resize(ef);
 	*/
 	return W;
+}
+
+template<typename U, template<typename> class Allocator>
+parlay::sequence<std::pair<uint32_t,float>> HNSW<U,Allocator>::search(const T &q, uint32_t k, uint32_t ef)
+{
+	// std::priority_queue<dist,std::vector<dist>,farthest> W;
+	auto eps = entrance;
+	for(int l_c=level[entrance[0]]; l_c>0; --l_c) // TODO: fix the type
+	{
+		const auto W = search_layer(q, eps, 1, l_c);
+		eps.clear();
+		eps.push_back(W[0].u);
+	}
+	auto W = search_layer(q, eps, ef, 0);
+	if(W.size()>ef)
+	{
+		parlay::sort_inplace(W, farthest());
+		W.resize(ef);
+	}
+	
+	return parlay::tabulate(W.size(), [&](size_t i){
+		return std::make_pair(W[i].u, W[i].d);
+	});
+}
+
+
+template<typename U, template<typename> class Allocator>
+template<typename Getter>
+HNSW<U,Allocator>::HNSW(const std::string &filename_model, Getter getter)
+{
+	std::ifstream model(filename_model, std::ios::binary);
+	if(!model.is_open())
+		throw std::runtime_error("Failed to open the model");
+
+	auto read = [&](auto &data, auto ...args){
+		auto read_impl = [&](auto &f, auto &data, auto ...args){
+			using T = std::remove_reference_t<decltype(data)>;
+			if constexpr(std::is_pointer_v<std::decay_t<T>>)
+			{
+				auto read_array = [&](auto &data, size_t size, auto ...args){
+					for(size_t i=0; i<size; ++i)
+						f(f, data[i], args...);
+				};
+				// use the array extent as the size
+				if constexpr(sizeof...(args)==0 && std::is_array_v<T>)
+				{
+					read_array(data, std::extent_v<T>);
+				}
+				else
+				{
+					static_assert(sizeof...(args), "size was not provided");
+					read_array(data, args...);
+				}
+			}
+			else
+			{
+				static_assert(std::is_standard_layout_v<T>);
+				model.read((char*)&data, sizeof(data));
+			}
+		};
+		read_impl(read_impl, data, args...);
+	};
+
+	char model_type[5] = {'\000'};
+	read(model_type, 4);
+	if(strcmp(model_type,"HNSW"))
+		throw std::runtime_error("Wrong type of model");
+	uint32_t version;
+	read(version);
+	if(version>1)
+		throw std::runtime_error("Unsupported version");
+
+	size_t code_U, size_node;
+	read(code_U);
+	read(size_node);
+	if((typeid(U).hash_code()^sizeof(U))!=code_U)
+		throw std::runtime_error("Inconsistent type `U`");
+	/*
+	if(sizeof(node)!=size_node)
+		throw std::runtime_error("Inconsistent type `node`");
+	*/
+
+	// read parameter configuration
+	read(dim);
+	read(m_l);
+	read(m);
+	read(ef_construction);
+	read(alpha);
+	read(n);
+	puts("Configuration loaded");
+	printf("dim = %u\n", dim);
+	printf("m_l = %f\n", m_l);
+	printf("m = %u\n", m);
+	printf("efc = %u\n", ef_construction);
+	printf("alpha = %f\n", alpha);
+	printf("n = %u\n", n);
+	// read indices
+	std::vector<node_id> node_read(n);
+	pointset.resize(n);
+	level.resize(n);
+	uint32_t level_max = 0;
+	for(uint32_t i=0; i<n; ++i)
+	{
+		uint32_t l;
+		read(l);
+		uint32_t id_u;
+		read(id_u);
+
+		node_read[i] = id_u;
+		level[id_u] = l;
+		pointset[id_u] = &static_cast<const T&>(getter(id_u));
+		if(l>level_max)
+			level_max = l;
+	}
+	// vetex_add[l]: the vertices to add on the layer `l`
+	std::vector<std::vector<std::tuple<node_id,edge_node*>>> vertex_add(level_max+1);
+	for(node_id u : node_read)
+		for(uint32_t l=0; l<=level[u]; ++l)
+		{
+			size_t size;
+			read(size);
+			parlay::sequence<std::tuple<node_id,empty_weight>> nbh(size);
+			for(size_t i=0; i<size; ++i)
+			{
+				uint32_t id_v;
+				read(id_v);
+				nbh[i] = {id_v,empty_weight{}};
+			}
+			edge_tree edge_insert(nbh.begin(), nbh.end());
+			vertex_add[l].emplace_back(u, edge_insert.root);
+			edge_insert.root = nullptr;
+		}
+
+	G.resize(vertex_add.size());
+	for(size_t l=0; l<vertex_add.size(); ++l)
+	{
+		auto &t = vertex_add[l]; // TODO: make it const
+		G[l].insert_vertices_batch(t.size(), t.data());
+	}
+	// read entrances
+	size_t size;
+	read(size);
+	entrance.resize(size);
+	for(size_t i=0; i<size; ++i)
+		read(entrance[i]);
+
+	for(uint32_t l=0; l<=level[entrance[0]]; ++l)
+		debug_output_graph(l);
 }
 
 template<typename U, template<typename> class Allocator>

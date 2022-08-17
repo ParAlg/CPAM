@@ -88,6 +88,7 @@ void output_deg(HNSW<descr_fvec> &g, commandLine param, parlay::internal::timer 
 	};
 	const char* outfile = param.getOptionValue("-f");
 	const uint32_t level = param.getOptionIntValue("-l", 0);
+	/*
 	auto deg = g.get_deg(level);
 	FILE *file_deg = fopen(outfile, "w");
 	if(!file_deg)
@@ -100,6 +101,7 @@ void output_deg(HNSW<descr_fvec> &g, commandLine param, parlay::internal::timer 
 		fprintf(file_deg, "%u\n", e);
 	}
 	fclose(file_deg);
+	*/
 }
 
 void output_recall(HNSW<descr_fvec> &g, commandLine param, parlay::internal::timer &t)
@@ -122,7 +124,7 @@ void output_recall(HNSW<descr_fvec> &g, commandLine param, parlay::internal::tim
 	const uint32_t ef = param.getOptionIntValue("-ef", cnt_rank_cmp*50);
 	const uint32_t cnt_pts_query = param.getOptionIntValue("-k", q.size());
 
-	std::vector<std::vector<std::pair<uint32_t,float>>> res(cnt_pts_query);
+	std::vector<parlay::sequence<std::pair<uint32_t,float>>> res(cnt_pts_query);
 	parlay::parallel_for(0, cnt_pts_query, [&](size_t i){
 		res[i] = g.search(q[i], cnt_rank_cmp, ef);
 	});
@@ -171,12 +173,12 @@ void output_neighbor(HNSW<descr_fvec> &g, commandLine param, parlay::internal::t
 		scanf("%u%u%u%u%u", &ef, &recall, &begin, &end, &stripe);
 		for(uint32_t i=begin; i<end; i+=stripe)
 		{
-			auto res = g.search_ex(q[i], recall, ef);
+			auto res = g.search(q[i], recall, ef);
 			printf("Neighbors of %u\n", i);
 			for(auto it=res.crbegin(); it!=res.crend(); ++it)
 			{
-				const auto [id,dep,dis] = *it;
-				printf("  [%u]\t%u\t%.6f\n", dep, id, dis);
+				const auto [id,dis] = *it;
+				printf("  [%u]\t%.6f\n", id, dis);
 			}
 			putchar('\n');
 		}
@@ -191,9 +193,10 @@ void count_number(HNSW<descr_fvec> &g, commandLine param, parlay::internal::time
 		return;
 	};
 	std::map<uint32_t,uint32_t> cnt;
+	/*
 	for(const auto *p : g.node_pool)
 		cnt[p->level]++;
-	
+	*/
 	uint32_t sum = 0;
 	for(int i=cnt.rbegin()->first; i>=0; --i)
 		printf("#nodes in lev. %d: %u (%u)\n", i, sum+=cnt[i], cnt[i]);
@@ -217,7 +220,7 @@ int main(int argc, char **argv)
 	t.next("Read inFile");
 
 	fputs("Start building HNSW\n", stderr);
-	HNSW<descr_fvec> g(file_model, [&](uint32_t i){
+	HNSW<descr_fvec> g(file_model, [&](uint32_t i) -> fvec&{
 		return ps[i];
 	});
 	t.next("Build index");
