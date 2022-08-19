@@ -206,6 +206,52 @@ struct versioned_graph {
     release_version(std::move(S));
   }
 
+  void add_version_from_graph(snapshot_graph G_next){
+    live_versions.insert(std::make_tuple(current_timestamp,
+                                    std::make_tuple(refct_utils::make_refct(current_timestamp, 1),
+                                               G_next.get_root())));
+    G_next.clear_root();
+
+    // 2. Make the new version visible
+    cpam::utils::fetch_and_add(&current_timestamp, 1);
+  }
+
+  template <class Vertex>
+  void insert_vertices_batch(Vertex& vertices, bool functional = true) {
+    auto S = acquire_version();
+    const auto& G = S.graph;
+
+    // 1. Insert the new graph (not yet visible) into the live versions set
+    snapshot_graph G_next = G.insert_vertices_batch(vertices.size(), vertices.begin(), functional);
+    live_versions.insert(std::make_tuple(current_timestamp,
+                                    std::make_tuple(refct_utils::make_refct(current_timestamp, 1),
+                                               G_next.get_root())));
+    G_next.clear_root();
+
+    // 2. Make the new version visible
+    cpam::utils::fetch_and_add(&current_timestamp, 1);
+
+    release_version(std::move(S));
+  }
+
+  template <class vertex_id>
+  void delete_vertices_batch(vertex_id& vertices, bool functional = true) {
+    auto S = acquire_version();
+    const auto& G = S.graph;
+
+    // 1. Insert the new graph (not yet visible) into the live versions set
+    snapshot_graph G_next = G.delete_vertices_batch(vertices.size(), vertices.begin(), functional);
+    live_versions.insert(std::make_tuple(current_timestamp,
+                                    std::make_tuple(refct_utils::make_refct(current_timestamp, 1),
+                                               G_next.get_root())));
+    G_next.clear_root();
+
+    // 2. Make the new version visible
+    cpam::utils::fetch_and_add(&current_timestamp, 1);
+
+    release_version(std::move(S));
+  }
+
 
 };
 
