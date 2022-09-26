@@ -358,7 +358,7 @@ struct symmetric_graph {
   // m : number of edges
   // edges: pairs of edges to insert. Currently working with undirected graphs;
   template <class VtxEntry>
-  void insert_vertices_batch(size_t m, VtxEntry* E, bool functional = false) {
+  void insert_vertices_batch(size_t m, VtxEntry* E) {
     timer pt("Insert", false);
     timer t("Insert", false);
     auto E_slice = parlay::make_slice(E, E + m);
@@ -372,8 +372,8 @@ struct symmetric_graph {
       t.root = cur;  // Lets the ref-cnt get decremented here.
       return inc;
     };
-    if(functional) V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
-    else V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
+    // if(functional) V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
+    V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
   }
 
   // m : number of vertices to delete

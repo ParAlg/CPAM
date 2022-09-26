@@ -232,7 +232,7 @@ struct knn_index {
                 maxDeg, std::numeric_limits<node_id>::max());
             auto output_slice = parlay::make_slice(new_out_2.begin(),
                                                    new_out_2.begin() + maxDeg);
-            robustPrune(v[index], index, candidates, alpha, output_slice,
+            robustPrune(G, v[index], index, candidates, alpha, output_slice,
                         false);
             size_t deg = size_of(output_slice);
             auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
@@ -360,14 +360,14 @@ struct knn_index {
 
   // robustPrune routine as found in DiskANN paper.
   // The new candidate set is added to the supplied array (new_nghs).
-  void robustPrune(tvec_point* p, node_id p_id,
+  void robustPrune(Graph &GG, tvec_point* p, node_id p_id,
                    parlay::sequence<pid> candidates, double alpha,
                    parlay::slice<node_id*, node_id*> new_nghs,
                    bool add = true) {
     auto less = [&](pid a, pid b) { return a.second < b.second; };
     // add out neighbors of p to the candidate set.
     if (add) {
-      auto p_vertex = G.get_vertex(p_id);
+      auto p_vertex = GG.get_vertex(p_id);
       auto map_f = [&](node_id u, node_id neighbor_id, empty_weight weight) {
         candidates.push_back(std::make_pair(
             neighbor_id, distance(v[neighbor_id]->coordinates.begin(),
@@ -422,12 +422,12 @@ struct knn_index {
 
   // wrapper to allow calling robustPrune on a sequence of candidates
   // that do not come with precomputed distances
-  void robustPrune(Tvec_point<T>* p, node_id p_id,
+  void robustPrune(Graph &GG, Tvec_point<T>* p, node_id p_id,
                    parlay::sequence<node_id>& candidates, double alpha,
                    parlay::slice<node_id*, node_id*> new_nghs,
                    bool add = true) {
     parlay::sequence<pid> cc;
-    auto p_vertex = G.get_vertex(p_id);
+    auto p_vertex = GG.get_vertex(p_id);
     node_id p_ngh_size = p_vertex.out_degree();
 
     cc.reserve(candidates.size() + p_ngh_size);
@@ -436,7 +436,7 @@ struct knn_index {
           candidates[i], distance(v[candidates[i]]->coordinates.begin(),
                                   p->coordinates.begin(), d)));
     }
-    robustPrune(p, p_id, std::move(cc), alpha, new_nghs, add);
+    robustPrune(G, p, p_id, std::move(cc), alpha, new_nghs, add);
   }
 
   // special size function
@@ -452,8 +452,7 @@ struct knn_index {
   }
 
   void batch_insert(parlay::sequence<node_id>& inserts, double base = 2,
-                    double max_fraction = .02, bool random_order = true,
-                    bool functional = false) {
+                    double max_fraction = .02, bool random_order = true) {
     size_t n = v.size();
     size_t m = inserts.size();
     size_t max_batch_size = static_cast<size_t>(std::ceil(max_fraction * n));
@@ -489,7 +488,7 @@ struct knn_index {
         auto new_nghs =
             parlay::make_slice(new_out.begin() + maxDeg * (i - floor),
                                new_out.begin() + maxDeg * (i + 1 - floor));
-        robustPrune(v[index], index, visited, alpha, new_nghs);
+        robustPrune(G, v[index], index, visited, alpha, new_nghs);
       });
       // New neighbors of each point written into new_nbhs (above).
       // Not yet added to the graph G.
@@ -522,7 +521,7 @@ struct knn_index {
         return std::make_tuple(index, tree_ptr);
       });
 
-      G.insert_vertices_batch(KVs.size(), KVs.begin(), functional);
+      G.insert_vertices_batch(KVs.size(), KVs.begin());
       // std::cout << "After inserts, G.num_vertices() (max node_id) = "
       //           << G.num_vertices() << std::endl;
 
@@ -543,7 +542,7 @@ struct knn_index {
             maxDeg, std::numeric_limits<node_id>::max());
         auto output_slice =
             parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-        robustPrune(v[index], index, candidates, alpha, output_slice);
+        robustPrune(G, v[index], index, candidates, alpha, output_slice);
         size_t deg = size_of(output_slice);
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
@@ -552,7 +551,7 @@ struct knn_index {
       });
 
       // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
-      G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin(), functional);
+      G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
     }
   }
 

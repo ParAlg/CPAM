@@ -1,7 +1,7 @@
 #!/bin/bash
 echo "BASELINE COMPARISON"
 cd ..
-make
+make clean all
 rm outFile
 ./neighbors -R 100 -L 125 -k 200 -Q 250 -q /ssd1/ANN/sift/bigann_query.bvecs -o outFile /ssd1/ANN/sift/sift1M.bvecs
 cd bench
