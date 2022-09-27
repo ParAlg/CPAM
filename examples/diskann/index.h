@@ -169,7 +169,9 @@ struct knn_index {
     delete_set.swap(old_delete_set);
 
     auto S = VG.acquire_version();
-    Graph new_G = consolidate_deletes_simple(S.graph, old_delete_set);
+    // Graph new_G = consolidate_deletes_simple(S.graph, old_delete_set);
+    auto to_consolidate = parlay::tabulate(v.size(), [&] (size_t i) {return static_cast<node_id>(i);});
+    Graph new_G = consolidate_deletes_with_pruning(S.graph, old_delete_set, to_consolidate);
     Graph newer_G = remove_deleted_vertices(new_G, delete_vec);
     VG.add_version_from_graph(newer_G);
     VG.release_version(std::move(S));
@@ -214,68 +216,69 @@ struct knn_index {
     return new_G;
   }
 
-  // void consolidate_deletes_internal(std::set<node_id> old_delete_set,
-  //                                   parlay::sequence<node_id>& to_consolidate) {
-  //   auto consolidated_vertices =
-  //       parlay::sequence<std::tuple<node_id, edge_node*>>(
-  //           to_consolidate.size());
-  //   std::vector<bool> needs_consolidate(to_consolidate.size(), false);
+  Graph consolidate_deletes_with_pruning(Graph &G, std::set<node_id> old_delete_set,
+                                    parlay::sequence<node_id>& to_consolidate) {
+    auto consolidated_vertices =
+        parlay::sequence<std::tuple<node_id, edge_node*>>(
+            to_consolidate.size());
+    std::vector<bool> needs_consolidate(to_consolidate.size(), false);
 
-  //   parlay::parallel_for(0, to_consolidate.size(), [&](size_t i) {
-  //     node_id index = to_consolidate[i];
-  //     if (old_delete_set.find(index) == old_delete_set.end()) {
-  //       // remove deleted vertices and add their out_nbh
-  //       bool change = false;
-  //       auto current_vtx = G.get_vertex(index);
-  //       parlay::sequence<node_id> candidates;
-  //       auto g = [&](node_id a) {
-  //         return old_delete_set.find(a) == old_delete_set.end();
-  //       };
+    parlay::parallel_for(0, to_consolidate.size(), [&](size_t i) {
+      node_id index = to_consolidate[i];
+      if (old_delete_set.find(index) == old_delete_set.end()) {
+        // remove deleted vertices and add their out_nbh
+        bool change = false;
+        auto current_vtx = G.get_vertex(index);
+        parlay::sequence<node_id> candidates;
+        auto g = [&](node_id a) {
+          return old_delete_set.find(a) == old_delete_set.end();
+        };
 
-  //       auto f = [&](node_id u, node_id v, empty_weight wgh) {
-  //         if (g(v)) candidates.push_back(v);
-  //         return true;
-  //       };
+        auto f = [&](node_id u, node_id v, empty_weight wgh) {
+          if (g(v)) candidates.push_back(v);
+          return true;
+        };
 
-  //       auto h = [&](node_id u, node_id v, empty_weight wgh) {
-  //         if (g(v))
-  //           candidates.push_back(v);
-  //         else {
-  //           change = true;
-  //           auto vtx = G.get_vertex(v);
-  //           return vtx.out_neighbors().foreach_cond(f);
-  //         }
-  //         return true;
-  //       };
-  //       bool ret = current_vtx.out_neighbors().foreach_cond(h);
-  //       if (change && ret) {
-  //         needs_consolidate[i] = true;
-  //         if (candidates.size() <= maxDeg) {
-  //           auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
-  //           auto tree = edge_tree(begin, begin + candidates.size());
-  //           consolidated_vertices[i] = {index, tree.root};
-  //           tree.root = nullptr;
-  //         } else {
-  //           parlay::sequence<node_id> new_out_2(
-  //               maxDeg, std::numeric_limits<node_id>::max());
-  //           auto output_slice = parlay::make_slice(new_out_2.begin(),
-  //                                                  new_out_2.begin() + maxDeg);
-  //           robustPrune(G, v[index], index, candidates, alpha, output_slice,
-  //                       false);
-  //           size_t deg = size_of(output_slice);
-  //           auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
-  //           auto tree = edge_tree(begin, begin + deg);
-  //           consolidated_vertices[i] = {index, tree.root};
-  //           tree.root = nullptr;
-  //         }
-  //       }
-  //     }
-  //   });
-  //   auto filtered_vertices =
-  //       parlay::pack(consolidated_vertices, needs_consolidate);
-  //   G.insert_vertices_batch(filtered_vertices.size(),
-  //                           filtered_vertices.begin(), true);
-  // }
+        auto h = [&](node_id u, node_id v, empty_weight wgh) {
+          if (g(v))
+            candidates.push_back(v);
+          else {
+            change = true;
+            auto vtx = G.get_vertex(v);
+            vtx.out_neighbors().foreach_cond(f);
+          }
+          return true;
+        };
+        current_vtx.out_neighbors().foreach_cond(h);
+        if (change) {
+          needs_consolidate[i] = true;
+          if (candidates.size() <= maxDeg) {
+            auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
+            auto tree = edge_tree(begin, begin + candidates.size());
+            consolidated_vertices[i] = {index, tree.root};
+            tree.root = nullptr;
+          } else {
+            parlay::sequence<node_id> new_out_2(
+                maxDeg, std::numeric_limits<node_id>::max());
+            auto output_slice = parlay::make_slice(new_out_2.begin(),
+                                                   new_out_2.begin() + maxDeg);
+            robustPrune(G, v[index], index, candidates, alpha, output_slice,
+                        false);
+            size_t deg = size_of(output_slice);
+            auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
+            auto tree = edge_tree(begin, begin + deg);
+            consolidated_vertices[i] = {index, tree.root};
+            tree.root = nullptr;
+          }   
+        }
+      }
+    });
+    auto filtered_vertices =
+        parlay::pack(consolidated_vertices, needs_consolidate);
+    Graph new_G = G.insert_vertices_batch_functional(filtered_vertices.size(),
+                            filtered_vertices.begin());
+    return new_G;
+  }
 
   Graph remove_deleted_vertices(Graph &G, parlay::sequence<node_id>& delete_vec) {
     return G.delete_vertices_batch_functional(delete_vec.size(), delete_vec.begin());
