@@ -372,20 +372,47 @@ struct symmetric_graph {
       t.root = cur;  // Lets the ref-cnt get decremented here.
       return inc;
     };
-    // if(functional) V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
     V = vertex_tree::multi_insert_sorted(std::move(V), E_slice, combine_op);
+  }
+
+  template <class VtxEntry>
+  SymGraph insert_vertices_batch_functional(size_t m, VtxEntry* E) {
+    timer pt("Insert", false);
+    timer t("Insert", false);
+    auto E_slice = parlay::make_slice(E, E + m);
+    auto key_less = [&] (const VtxEntry& l, const VtxEntry& r) {
+      return std::get<0>(l) < std::get<0>(r);
+    };
+    parlay::sort_inplace(E_slice, key_less);
+
+    auto combine_op = [&] (edge_node* cur, edge_node* inc) {
+      edge_tree t;
+      t.root = cur;  // Lets the ref-cnt get decremented here.
+      return inc;
+    };
+    auto new_V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
+    return SymGraph(std::move(new_V));
   }
 
   // m : number of vertices to delete
   // D : array of the deleted vertex ids
-  void delete_vertices_batch(size_t m, vertex_id* D, bool functional = false) {
+  void delete_vertices_batch(size_t m, vertex_id* D) {
     timer pt("Insert", false);
     timer t("Insert", false);
     auto D_slice = parlay::make_slice(D, D + m);
     auto key_less = std::less<vertex_id>();
     parlay::sort_inplace(D_slice, key_less);
-    if(functional) V = vertex_tree::multi_delete_sorted(V, D_slice);
-    else V = vertex_tree::multi_delete_sorted(std::move(V), D_slice);
+    V = vertex_tree::multi_delete_sorted(std::move(V), D_slice);
+  }
+
+  SymGraph delete_vertices_batch_functional(size_t m, vertex_id* D) {
+    timer pt("Insert", false);
+    timer t("Insert", false);
+    auto D_slice = parlay::make_slice(D, D + m);
+    auto key_less = std::less<vertex_id>();
+    parlay::sort_inplace(D_slice, key_less);
+    auto new_V = vertex_tree::multi_delete_sorted(V, D_slice);
+    return SymGraph(std::move(new_V));
   }
 
   // Trying different versions of batch insert:

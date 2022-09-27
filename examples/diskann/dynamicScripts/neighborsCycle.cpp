@@ -33,6 +33,47 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     findex I(v, maxDeg, beamSize, alpha, d);
     timer build_t;
     build_t.start();
+    size_t n = v.size();
+    I.build_index(parlay::tabulate(
+        n/2, [&](size_t i) { return static_cast<node_id>(i); }));
+    build_t.next("Build time for half the points");
+    I.print_graph_status();
+    auto inserts = parlay::tabulate(
+        n/2, [&](size_t i) { return static_cast<node_id>(i+n/2); });
+    I.insert(inserts);
+    I.print_graph_status();
+    build_t.next("Finished insertions");
+  };
+}
+
+// I.build_index(parlay::tabulate(
+//         v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+//     build_t.next("Build time");
+//     int parts = 20;
+//     size_t m = v.size()/parts;
+//     for(int i=0; i<20; i++){
+//       parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
+//       std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
+//       I.lazy_delete(indices);
+//       I.consolidate_deletes();
+//       std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
+//       I.insert(indices);
+//     }
+//     build_t.next("Finished rebuilding");
+
+template <typename T>
+void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
+         double alpha, double dummy, int k, int Q,
+         parlay::sequence<Tvec_point<T>*> q, char* outFile) {
+  parlay::internal::timer t("ANN", report_stats);
+  {
+    timer build_t;
+    unsigned d = (v[0]->coordinates).size();
+    std::cout << "Size of dataset: " << v.size() << std::endl;
+    using findex = knn_index<T>;
+    findex I(v, maxDeg, beamSize, alpha, d);
+    build_t.start();
+    // size_t n = v.size();
     I.build_index(parlay::tabulate(
         v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
     build_t.next("Build time");
@@ -47,40 +88,12 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
       I.insert(indices);
     }
     build_t.next("Finished rebuilding");
-  };
-}
-
-template <typename T>
-void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
-         double alpha, double dummy, int k, int Q,
-         parlay::sequence<Tvec_point<T>*> q, char* outFile) {
-  parlay::internal::timer t("ANN", report_stats);
-  {
-    timer build_t;
-    unsigned d = (v[0]->coordinates).size();
-    std::cout << "Size of dataset: " << v.size() << std::endl;
-    using findex = knn_index<T>;
-    findex I(v, maxDeg, beamSize, alpha, d);
-    build_t.start();
-    I.build_index(parlay::tabulate( v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
-    build_t.next("Built index");
-    int parts = 20;
-    size_t m = v.size()/parts;
-    for(int i=0; i<20; i++){
-      parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
-      std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
-      I.lazy_delete(indices);
-      I.consolidate_deletes();
-      std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
-      I.insert(indices);
-    }
-    build_t.next("Finished rebuilding");
-
     parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
-    std::cout << "Built index, now performing queries" << std::endl;
+    std::cout << "Now performing queries" << std::endl;
     parlay::parallel_for(0, q.size(), [&](size_t i) {
       query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
     });
+    build_t.next("Performed queries");
 
    
 

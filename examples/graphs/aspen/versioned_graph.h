@@ -206,6 +206,16 @@ struct versioned_graph {
     release_version(std::move(S));
   }
 
+  void add_version_from_graph(snapshot_graph G_next){
+    live_versions.insert(std::make_tuple(current_timestamp,
+                                    std::make_tuple(refct_utils::make_refct(current_timestamp, 1),
+                                               G_next.get_root())));
+    G_next.clear_root();
+
+    // 2. Make the new version visible
+    cpam::utils::fetch_and_add(&current_timestamp, 1);
+  }
+
 
 };
 
