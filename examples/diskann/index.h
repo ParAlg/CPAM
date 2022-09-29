@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <cpam/cpam.h>
 #include <pam/pam.h>
 #include <pam/get_time.h>
@@ -30,6 +31,7 @@ struct knn_index {
   using edge_node = typename Graph::edge_node;
   using vertex_tree = typename Graph::vertex_tree;
   using vertex_node = typename Graph::vertex_node;
+  using LockGuard = std::lock_guard<std::mutex>;
 
   aspen::versioned_graph<Graph> VG; 
 
@@ -114,6 +116,30 @@ struct knn_index {
     VG.release_version(std::move(S));
   }
 
+  parlay::sequence<parlay::sequence<node_id>> query(parlay::sequence<Tvec_point<T>*>q, 
+    int k, int beamSizeQ){
+    
+    if ((k + 1) > beamSizeQ) {
+      std::cout << "Error: beam search parameter Q = " << beamSizeQ
+                << " same size or smaller than k = " << k << std::endl;
+      abort();
+    }
+    parlay::sequence<parlay::sequence<node_id>> neighbors(q.size());
+    auto S = VG.acquire_version();
+    parlay::parallel_for(0, q.size(), [&] (size_t i){
+      auto pairs = beam_search(S.graph, q[i]->coordinates.begin(), beamSizeQ);
+      auto& beamElts = pairs.first;
+      parlay::sequence<node_id> single_neighbors(k);
+      // Ignoring reporting the point itself for now.
+      for (int j = 0; j < k; j++) {
+        single_neighbors[j] = beamElts[j].first;
+      }
+      neighbors[i] = single_neighbors;
+    });
+    VG.release_version(std::move(S));
+    return neighbors;
+  }
+
   //TODO have multiple queries use the same version
   parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
     if ((k + 1) > beamSizeQ) {
@@ -134,17 +160,22 @@ struct knn_index {
   }
 
   void lazy_delete(parlay::sequence<node_id> deletes) {
-    for (node_id p : deletes) {
-      if (p < 0 || p > (node_id)v.size()) {
-        std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
-                  << std::endl;
-        abort();
+    {
+      LockGuard guard(delete_lock);
+      for (node_id p : deletes) {
+        if (p < 0 || p > (node_id)v.size()) {
+          std::cout << "ERROR: invalid point " << p << " given to lazy_delete"
+                    << std::endl;
+          abort();
+        }
+        if (p != medoid->id)
+            delete_set.insert(p);
+          
+        else
+          std::cout << "Deleting medoid not permitted; continuing" << std::endl;
       }
-      if (p != medoid->id)
-        delete_set.insert(p);
-      else
-        std::cout << "Deleting medoid not permitted; continuing" << std::endl;
     }
+    
   }
 
   void lazy_delete(node_id p) {
@@ -157,39 +188,73 @@ struct knn_index {
       std::cout << "Deleting medoid not permitted; continuing" << std::endl;
       return;
     }
-    delete_set.insert(p);
+    {
+      LockGuard guard(delete_lock);
+      delete_set.insert(p);
+    }
+    
   }
 
-  void consolidate_deletes() {
-    // freeze the delete set before beginning a consolidate
-    // later will add versioning/locks
-    parlay::sequence<node_id> delete_vec;
-    for (auto d : delete_set) delete_vec.push_back(d);
-    std::set<unsigned> old_delete_set;
-    delete_set.swap(old_delete_set);
+  void start_delete_epoch(){
+    //freeze the delete set and start a new one before consolidation
+    if(!epoch_running){
+      {
+        LockGuard guard(delete_lock);
+        delete_set.swap(old_delete_set);
+      }
+    epoch_running = true;
+    }else{
+      std::cout << "ERROR: cannot start new epoch while previous epoch is running" << std::endl;
+      abort();
+    }
+    
+  }
 
-    auto S = VG.acquire_version();
-    // Graph new_G = consolidate_deletes_simple(S.graph, old_delete_set);
-    auto to_consolidate = parlay::tabulate(v.size(), [&] (size_t i) {return static_cast<node_id>(i);});
-    Graph new_G = consolidate_deletes_with_pruning(S.graph, old_delete_set, to_consolidate);
-    Graph newer_G = remove_deleted_vertices(new_G, delete_vec);
-    VG.add_version_from_graph(newer_G);
-    VG.release_version(std::move(S));
+  void end_delete_epoch(){
+    if(epoch_running){
+      
+      parlay::sequence<node_id> delete_vec;
+      for(auto d : old_delete_set) delete_vec.push_back(d);
 
-    auto W = VG.acquire_version();
-    check_deletes_correct(W.graph, old_delete_set);
-    VG.release_version(std::move(W));
+      auto W = VG.acquire_version();
+      Graph new_G = W.graph.delete_vertices_batch_functional(delete_vec.size(), delete_vec.begin());
+      check_deletes_correct(new_G);
+      VG.add_version_from_graph(new_G);
+      VG.release_version(std::move(W));
+
+      old_delete_set.clear();
+      epoch_running = false;
+    }else{
+      std::cout << "ERROR: cannot end epoch while epoch is not running" << std::endl;
+      abort();
+    }
+  }
+
+  void consolidate_deletes(parlay::sequence<node_id> to_consolidate) {
+    if(epoch_running){
+      auto S = VG.acquire_version();
+      Graph new_G = consolidate_deletes_with_pruning(S.graph, to_consolidate);
+      VG.add_version_from_graph(new_G);
+      VG.release_version(std::move(S));
+    }else{
+      std::cout << "ERROR: cannot consolidate when delete epoch not initialized" << std::endl;
+      abort();
+    }
+    
   }
 
  private:
   std::set<node_id> delete_set;
+  std::set<node_id> old_delete_set;
+  std::mutex delete_lock; //lock for delete_set which can only be updated sequentially
+  bool epoch_running = false;
   // p_coords: query vector coordinates
   // v: database of vectors
   // medoid: "root" of the proximity graph
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
 
-  Graph consolidate_deletes_simple(Graph &G, std::set<node_id> old_delete_set) {
+  Graph consolidate_deletes_simple(Graph &G) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
 
@@ -216,7 +281,7 @@ struct knn_index {
     return new_G;
   }
 
-  Graph consolidate_deletes_with_pruning(Graph &G, std::set<node_id> old_delete_set,
+  Graph consolidate_deletes_with_pruning(Graph &G,
                                     parlay::sequence<node_id>& to_consolidate) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(
@@ -280,11 +345,7 @@ struct knn_index {
     return new_G;
   }
 
-  Graph remove_deleted_vertices(Graph &G, parlay::sequence<node_id>& delete_vec) {
-    return G.delete_vertices_batch_functional(delete_vec.size(), delete_vec.begin());
-  }
-
-  void check_deletes_correct(Graph &G, std::set<node_id>& old_delete_set) {
+  void check_deletes_correct(Graph &G) {
     parlay::parallel_for(0, v.size(), [&](size_t i) {
       if (old_delete_set.find(i) == old_delete_set.end()) {
         auto current_vtx = G.get_vertex(i);
@@ -303,18 +364,6 @@ struct knn_index {
       }
     });
   }
-
-  // void check_for_zero_deg(std::set<node_id> &old_delete_set){
-  //   parlay::parallel_for(0, v.size(), [&] (size_t i){
-  //     if(old_delete_set.find(i) == old_delete_set.end()){
-  //       auto current_vtx = G.get_vertex(i);
-  //       int count = 0;
-  //       auto f = [&] (node_id u, node_id v, empty_weight wgh) {count++; return true;};
-  //       current_vtx.out_neighbors().foreach_cond(f);
-  //       if(count == 0) std::cout << "Vertex " << i << " has degree zero after deletions" << std::endl;
-  //     }
-  //   });
-  // }
 
   std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(Graph &G, 
       T* p_coords, int beamSize) {

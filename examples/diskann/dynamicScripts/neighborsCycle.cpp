@@ -79,20 +79,20 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     build_t.next("Build time");
     int parts = 20;
     size_t m = v.size()/parts;
-    for(int i=0; i<20; i++){
+    for(int i=0; i<1; i++){
       parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
       std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
       I.lazy_delete(indices);
-      I.consolidate_deletes();
+      I.start_delete_epoch();
+      I.consolidate_deletes(parlay::tabulate(
+        v.size(), [&](size_t i) { return static_cast<node_id>(i); }));
+      I.end_delete_epoch();
       std::cout << "Re-inserting " << indices[0] << " through " << indices[m-1] << std::endl; 
       I.insert(indices);
     }
     build_t.next("Finished rebuilding");
-    parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
     std::cout << "Now performing queries" << std::endl;
-    parlay::parallel_for(0, q.size(), [&](size_t i) {
-      query_results[i] = I.query(q[i]->coordinates.begin(), k, Q);
-    });
+    auto query_results = I.query(q, k, Q);
     build_t.next("Performed queries");
 
    
