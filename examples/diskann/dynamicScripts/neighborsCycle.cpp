@@ -79,7 +79,7 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     build_t.next("Build time");
     int parts = 20;
     size_t m = v.size()/parts;
-    for(int i=0; i<1; i++){
+    for(int i=0; i<parts; i++){
       parlay::sequence<node_id> indices = parlay::tabulate(m, [&] (size_t j){return static_cast<node_id>(i*m+j);});
       std::cout << "Deleting indices " << indices[0] << " through " << indices[m-1] << std::endl; 
       I.lazy_delete(indices);

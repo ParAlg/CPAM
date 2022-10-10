@@ -42,7 +42,11 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
       parlay::sequence<node_id> delete_list = parlay::tabulate(r, [&] (size_t j){return static_cast<node_id>(((i)*r)+r-j-1);});
       std::cout << "Deleting points " << delete_list[delete_list.size()-1] << " through " << delete_list[0] << std::endl; 
       I.lazy_delete(delete_list);
-      I.consolidate_deletes();
+      I.start_delete_epoch();
+      parlay::sequence<node_id> current_list = parlay::tabulate(r, [&] (size_t j){
+        return static_cast<node_id>(i*r+j-1);});
+      I.consolidate_deletes(current_list);
+      I.end_delete_epoch();
       parlay::sequence<node_id> insert_list = parlay::tabulate(r, [&] (size_t j){return static_cast<node_id>(((i)*r)-r-j-1);});
       std::cout << "Inserting points " << insert_list[insert_list.size()-1] << " through " << insert_list[0] << std::endl; 
       I.insert(insert_list);
@@ -72,7 +76,11 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
       parlay::sequence<node_id> delete_list = parlay::tabulate(r, [&] (size_t j){return static_cast<node_id>(((i)*r)+r-j-1);});
       std::cout << "Deleting points " << delete_list[delete_list.size()-1] << " through " << delete_list[0] << std::endl; 
       I.lazy_delete(delete_list);
-      I.consolidate_deletes();
+      parlay::sequence<node_id> current_list = parlay::tabulate(r, [&] (size_t j){
+        return static_cast<node_id>(i*r+j-1);});
+      I.start_delete_epoch();
+      I.consolidate_deletes(current_list);
+      I.end_delete_epoch();
       parlay::sequence<node_id> insert_list = parlay::tabulate(r, [&] (size_t j){return static_cast<node_id>(((i)*r)-r-j-1);});
       std::cout << "Inserting points " << insert_list[insert_list.size()-1] << " through " << insert_list[0] << std::endl; 
       I.insert(insert_list);

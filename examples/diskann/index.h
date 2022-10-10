@@ -63,6 +63,8 @@ struct knn_index {
 
   void build_index(parlay::sequence<node_id> inserts) {
     // Find the medoid, which each beamSearch will begin from.
+    std::cout << "Distance calls: " << distance_calls.get_value() << std::endl;
+    std::cout << "Total visited: " << total_visited.get_value() << std::endl;
     Graph Initial_Graph;
     node_id medoid_id = find_approx_medoid();
     Initial_Graph.insert_vertex_inplace(medoid_id, nullptr);
@@ -104,14 +106,18 @@ struct knn_index {
 
   void insert(parlay::sequence<node_id> inserts, bool random_order = false) {
     auto S = VG.acquire_version();
+    std::cout << "initializing sequences" << std::endl;
     parlay::sequence<node_id> init_inserts(1);
     parlay::sequence<node_id> remaining_inserts(inserts.size()-1);
     parlay::parallel_for(0, inserts.size(), [&] (size_t i){
       if(i==0) init_inserts[i] = inserts[i];
       else remaining_inserts[i-1] = inserts[i];
     });
+    std::cout << "Performing functional update " << std::endl;
     Graph new_G = batch_insert_functional(S.graph, init_inserts);
+    std::cout << "Performing inplace update " << std::endl;
     batch_insert_inplace(new_G, remaining_inserts, 2, .02, random_order);
+    std::cout << "Posting new version " << std::endl;
     VG.add_version_from_graph(new_G); //TODO use std::move()??
     VG.release_version(std::move(S));
   }
@@ -365,78 +371,77 @@ struct knn_index {
     });
   }
 
-  std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(Graph &G, 
-      T* p_coords, int beamSize) {
-    // initialize data structures
-    // pid = std::pair<node_id, float>
-    std::vector<pid> visited;
-    parlay::sequence<pid> frontier;
-    auto less = [&](pid a, pid b) {
-      return a.second < b.second || (a.second == b.second && a.first < b.first);
-    };
-    auto make_pid = [&](node_id q) -> std::pair<node_id, double> {
-      // Search for q in G.
-      auto dist = distance(v[q]->coordinates.begin(), p_coords, d);
+  // updated version by Guy
+std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
+    Graph &G, T* p_coords, int beamSize, int k=0, float cut=1.14) {
+  // initialize data structures
+  auto vvc = v[0]->coordinates.begin();
+  long stride = v[1]->coordinates.begin() - v[0]->coordinates.begin();
+
+  std::vector<pid> visited;
+  parlay::sequence<pid> frontier;
+  auto less = [&](pid a, pid b) {
+      return a.second < b.second || (a.second == b.second && a.first < b.first); };
+  auto make_pid = [&](node_id q) -> std::pair<node_id, double> {
+      auto dist = distance(vvc+q*stride, p_coords, d);
       return std::pair{q, dist};
     };
-    int bits = std::ceil(std::log2(beamSize * beamSize));
-    parlay::sequence<node_id> hash_table(1 << bits,
-                                         std::numeric_limits<node_id>::max());
 
-    // the frontier starts with the medoid
-    frontier.push_back(make_pid(medoid->id));
+  int bits = std::ceil(std::log2(beamSize*beamSize))-2;
+  parlay::sequence<node_id> hash_table(1 << bits, std::numeric_limits<node_id>::max());
 
-    std::vector<pid> unvisited_frontier(beamSize);
-    parlay::sequence<pid> new_frontier(beamSize + maxDeg);
-    unvisited_frontier[0] = frontier[0];
-    bool not_done = true;
+  // the frontier starts with the medoid
+  frontier.push_back(make_pid(medoid->id));
 
-    // terminate beam search when the entire frontier has been visited
-    while (not_done) {
-      // the next node to visit is the unvisited frontier node that is closest
-      // to p
-      pid currentPid = unvisited_frontier[0];
-      auto current_vtx = G.get_vertex(currentPid.first);
+  std::vector<pid> unvisited_frontier(beamSize);
+  parlay::sequence<pid> new_frontier(beamSize + maxDeg);
+  unvisited_frontier[0] = frontier[0];
+  int remain = 1;
 
-      auto g = [&](node_id a) {
-        node_id loc = parlay::hash64_2(a) & ((1 << bits) - 1);
-        if (hash_table[loc] == a) return false;
-        hash_table[loc] = a;
-        return true;
-      };
+  // terminate beam search when the entire frontier has been visited
+  while (remain > 0) {
+    // the next node to visit is the unvisited frontier node that is closest to p
+    pid currentPid = unvisited_frontier[0];
+    auto current_vtx = G.get_vertex(currentPid.first);
 
-      parlay::sequence<node_id> candidates;
-      auto f = [&](node_id u, node_id v, empty_weight wgh) {
-        if (g(v)) {
-          candidates.push_back(v);
-        }
-        return true;
-      };
-      current_vtx.out_neighbors().foreach_cond(f);
+    auto g = [&](node_id a) {
+      node_id loc = parlay::hash64_2(a) & ((1 << bits) - 1);
+      if (hash_table[loc] == a) return false;
+      hash_table[loc] = a;
+      return true;
+    };
 
-      auto pairCandidates =
-          parlay::map(candidates, [&](long c) { return make_pid(c); });
-      auto sortedCandidates =
-          parlay::unique(parlay::sort(pairCandidates, less));
-      auto f_iter = std::set_union(
-          frontier.begin(), frontier.end(), sortedCandidates.begin(),
-          sortedCandidates.end(), new_frontier.begin(), less);
-      size_t f_size = std::min<size_t>(beamSize, f_iter - new_frontier.begin());
-      frontier =
-          parlay::tabulate(f_size, [&](long i) { return new_frontier[i]; });
-      visited.insert(
-          std::upper_bound(visited.begin(), visited.end(), currentPid, less),
-          currentPid);
-      auto uf_iter =
-          std::set_difference(frontier.begin(), frontier.end(), visited.begin(),
-                              visited.end(), unvisited_frontier.begin(), less);
-      not_done = uf_iter > unvisited_frontier.begin();
-    }
+    parlay::sequence<node_id> candidates;
+    auto f = [&](node_id u, node_id v, empty_weight wgh) {
+      if (g(v)) {
+        candidates.push_back(v);
+      }
+      return true;
+    };
+    current_vtx.out_neighbors().foreach_cond(f);
+    auto pairCandidates = parlay::map(candidates, [&] (long c) {return make_pid(c);});
+    auto sortedCandidates = parlay::sort(pairCandidates, less);
+    auto f_iter = std::set_union(frontier.begin(), frontier.end(),
+				 sortedCandidates.begin(), sortedCandidates.end(),
+				 new_frontier.begin(), less);
+    size_t f_size = std::min<size_t>(beamSize, f_iter - new_frontier.begin());
+    if (k > 0 && (int) f_size > k) 
+      f_size = (std::upper_bound(new_frontier.begin(), new_frontier.begin() + f_size,
+				std::pair{0, cut * new_frontier[k].second}, less)
+		- new_frontier.begin());
+    frontier = parlay::tabulate(f_size, [&] (long i) {return new_frontier[i];});
+    visited.insert(std::upper_bound(visited.begin(), visited.end(), currentPid, less), currentPid);
+    auto uf_iter = std::set_difference(frontier.begin(), frontier.end(),
+				 visited.begin(), visited.end(),
+				 unvisited_frontier.begin(), less);
+    remain = uf_iter - unvisited_frontier.begin();
+  }
 #ifdef STATS
     total_visited.update_value(visited.size());
 #endif
-    return std::make_pair(frontier, parlay::to_sequence(visited));
-  }
+  return std::make_pair(frontier, parlay::to_sequence(visited));
+}
+
 
   // robustPrune routine as found in DiskANN paper.
   // The new candidate set is added to the supplied array (new_nghs).
@@ -475,7 +480,7 @@ struct knn_index {
 
     size_t candidate_idx = 0;
 
-    while (num_new <= maxDeg && candidate_idx < candidates.size()) {
+    while (num_new < maxDeg && candidate_idx < candidates.size()) {
       // Don't need to do modifications.
       node_id p_star = candidates[candidate_idx].first;
       candidate_idx++;
@@ -562,7 +567,6 @@ struct knn_index {
       // robustPrune with the visited list as its candidate set
       parlay::parallel_for(floor, ceiling, [&](size_t i) {
         size_t index = shuffled_inserts[i];
-
         parlay::sequence<pid> visited =
             (beam_search(G, v[index]->coordinates.begin(), beamSize)).second;
         auto new_nghs =
@@ -630,7 +634,7 @@ struct knn_index {
         tree.root = nullptr;
       });
 
-      // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+      std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
     }
   }
