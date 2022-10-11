@@ -50,7 +50,11 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
     auto updater = [&] () {
         // timer update_t;
         for(node_id i=0; i< (node_id) num_update_batches; i++){
-            auto indices = parlay::tabulate(update_batch_size, [&] (node_id j){
+            parlay::sequence<node_id> indices;
+            if(i==0){ 
+              indices = parlay::tabulate(update_batch_size-1, [&] (node_id j){
+                return static_cast<node_id>(i*update_batch_size+j+1);});
+            }else indices = parlay::tabulate(update_batch_size, [&] (node_id j){
                 return static_cast<node_id>(i*update_batch_size+j);});
             std::cout << "Inserting indices " << indices[0] << 
                 " through " << indices[indices.size()-1] << std::endl;

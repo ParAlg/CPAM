@@ -106,8 +106,8 @@ struct knn_index {
 
   void insert(parlay::sequence<node_id> inserts, bool random_order = false) {
     auto S = VG.acquire_version();
-    std::cout << "initializing sequences" << std::endl;
-    parlay::sequence<node_id> init_inserts(1);
+    std::cout << "Acquired version with timestamp " << S.timestamp << std::endl;
+    parlay::sequence<node_id> init_inserts({inserts[0]});
     parlay::sequence<node_id> remaining_inserts(inserts.size()-1);
     parlay::parallel_for(0, inserts.size(), [&] (size_t i){
       if(i==0) init_inserts[i] = inserts[i];
@@ -634,7 +634,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
         tree.root = nullptr;
       });
 
-      std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
+      // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
       G.insert_vertices_batch(reverse_KVs.size(), reverse_KVs.begin());
     }
   }
@@ -689,8 +689,8 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
     });
 
     Graph new_G = G.insert_vertices_batch_functional(KVs.size(), KVs.begin());
-    // std::cout << "After inserts, G.num_vertices() (max node_id) = "
-    //           << new_G.num_vertices() << std::endl;
+    std::cout << "After inserts, G.num_vertices() (max node_id) = "
+              << new_G.num_vertices() << std::endl;
 
     // TODO: update the code below:
     auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
@@ -708,7 +708,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
           maxDeg, std::numeric_limits<node_id>::max());
       auto output_slice =
           parlay::make_slice(new_out_2.begin(), new_out_2.begin() + maxDeg);
-      robustPrune(G, v[index], index, candidates, alpha, output_slice);
+      robustPrune(new_G, v[index], index, candidates, alpha, output_slice);
       size_t deg = size_of(output_slice);
       auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
       auto tree = edge_tree(begin, begin + deg);
@@ -717,7 +717,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
     });
 
     // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
-    Graph newer_G = G.insert_vertices_batch_functional(reverse_KVs.size(), reverse_KVs.begin());
+    Graph newer_G = new_G.insert_vertices_batch_functional(reverse_KVs.size(), reverse_KVs.begin());
     return newer_G;
   }
 
