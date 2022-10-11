@@ -132,6 +132,7 @@ struct knn_index {
     }
     parlay::sequence<parlay::sequence<node_id>> neighbors(q.size());
     auto S = VG.acquire_version();
+    std::cout << "Query batch acquired version with timestamp " << S.timestamp << std::endl;
     parlay::parallel_for(0, q.size(), [&] (size_t i){
       auto pairs = beam_search(S.graph, q[i]->coordinates.begin(), beamSizeQ);
       auto& beamElts = pairs.first;
@@ -260,7 +261,7 @@ struct knn_index {
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
 
-  Graph consolidate_deletes_simple(Graph &G) {
+  Graph consolidate_deletes_simple(Graph G) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
 
@@ -287,7 +288,7 @@ struct knn_index {
     return new_G;
   }
 
-  Graph consolidate_deletes_with_pruning(Graph &G,
+  Graph consolidate_deletes_with_pruning(Graph G,
                                     parlay::sequence<node_id>& to_consolidate) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(
@@ -689,8 +690,8 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
     });
 
     Graph new_G = G.insert_vertices_batch_functional(KVs.size(), KVs.begin());
-    std::cout << "After inserts, G.num_vertices() (max node_id) = "
-              << new_G.num_vertices() << std::endl;
+    // std::cout << "After inserts, G.num_vertices() (max node_id) = "
+    //           << new_G.num_vertices() << std::endl;
 
     // TODO: update the code below:
     auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));

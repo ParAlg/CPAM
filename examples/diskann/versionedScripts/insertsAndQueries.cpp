@@ -65,17 +65,23 @@ void ANN(parlay::sequence<Tvec_point<T>*> v, int maxDeg, int beamSize,
 
     auto queries = [&] () {
         // timer query_t;
-        // for(int i=0; i< (int) num_query_batches; i++){
-        //     std::cout << "Querying elements" << query_start+(i*query_batch_size) 
-        //     << " through " << query_start+((i+1)*query_batch_size)  << std::endl;
-        //     auto queries = parlay::tabulate(query_batch_size, [&] (size_t j){
-        //         return v[query_start + i*query_batch_size+j];});
-        //     I.query(queries, k, Q);
-        //     std::cout << "Finished query batch" << std::endl;
-        // }
+        for(int i=0; i< (int) num_query_batches; i++){
+            std::cout << "Querying elements " << query_start+(i*query_batch_size) 
+            << " through " << query_start+((i+1)*query_batch_size)  << std::endl;
+            auto queries = parlay::tabulate(query_batch_size, [&] (size_t j){
+                return v[query_start + i*query_batch_size+j];});
+            I.query(queries, k, Q);
+            std::cout << "Finished query batch" << std::endl;
+        }
     };
 
+    auto empty = [&] () {};
+
     parlay::par_do(updater, queries);
+
+    // parlay::par_do(updater, empty);
+
+    // parlay::par_do(queries, empty);
 }
 
 
