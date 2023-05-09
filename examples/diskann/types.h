@@ -14,11 +14,12 @@ struct Tvec_point {
   Tvec_point() : coordinates(parlay::make_slice<T*, T*>(nullptr, nullptr)) {}
 };
 
-// for an ivec file, which contains the ground truth
-// only info needed is the coordinates of the nearest neighbors of each point
+//for an ivec file, which contains the ground truth
+//only info needed is the coordinates of the nearest neighbors of each point
 struct ivec_point {
   node_id id;
   parlay::slice<int*, int*> coordinates;
-  ivec_point()
-      : coordinates(parlay::make_slice<int*, int*>(nullptr, nullptr)) {}
+  parlay::slice<float*, float*> distances;
+  ivec_point() :
+    coordinates(parlay::make_slice<int*, int*>(nullptr, nullptr)), distances(parlay::make_slice<float*, float*>(nullptr, nullptr)) {}
 };

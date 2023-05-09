@@ -9,7 +9,7 @@
 #include "types.h"
 #include "util/NSGDist.h"
 #include "util/counter.h"
-#include "util/distance.h"
+// #include "util/distance.h"
 
 bool stats = false;
 
@@ -22,7 +22,7 @@ struct knn_index {
   size_t beamSize;
   double alpha;
   size_t d;
-
+  Distance* D;
   atomic_sum_counter<size_t> total_visited;
 
   struct empty_weight {};
@@ -44,11 +44,11 @@ struct knn_index {
   using slice_tvec = decltype(make_slice(parlay::sequence<tvec_point*>()));
 
   knn_index(parlay::sequence<Tvec_point<T>*>& v, size_t maxDeg, size_t beamSize,
-            double Alpha, size_t dim)
-      : v(v), maxDeg(maxDeg), beamSize(beamSize), alpha(Alpha), d(dim) {
+            double Alpha, size_t dim, Distance* DD)
+      : v(v), maxDeg(maxDeg), beamSize(beamSize), alpha(Alpha), d(dim), D(DD) {
     std::cout << "Initialized knn_index with maxDeg = " << maxDeg
               << " beamSize = " << beamSize << " alpha = " << alpha
-              << " dim = " << dim << std::endl;
+              << " dim = " << dim << " distance function: " << D->id() <<  std::endl;
 
     total_visited.reset();
   }
@@ -123,7 +123,7 @@ struct knn_index {
   }
 
   parlay::sequence<parlay::sequence<node_id>> query(parlay::sequence<Tvec_point<T>*>q, 
-    int k, int beamSizeQ){
+    int k, int beamSizeQ, float cut=1.14){
     
     if ((k + 1) > beamSizeQ) {
       std::cout << "Error: beam search parameter Q = " << beamSizeQ
@@ -134,7 +134,7 @@ struct knn_index {
     auto S = VG.acquire_version();
     std::cout << "Query batch acquired version with timestamp " << S.timestamp << std::endl;
     parlay::parallel_for(0, q.size(), [&] (size_t i){
-      auto pairs = beam_search(S.graph, q[i]->coordinates.begin(), beamSizeQ);
+      auto pairs = beam_search(S.graph, q[i]->coordinates.begin(), beamSizeQ, k, cut);
       auto& beamElts = pairs.first;
       parlay::sequence<node_id> single_neighbors(k);
       // Ignoring reporting the point itself for now.
@@ -148,7 +148,7 @@ struct knn_index {
   }
 
   //TODO have multiple queries use the same version
-  parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ) {
+  parlay::sequence<node_id> query(T* query_coords, int k, int beamSizeQ, float cut) {
     if ((k + 1) > beamSizeQ) {
       std::cout << "Error: beam search parameter Q = " << beamSizeQ
                 << " same size or smaller than k = " << k << std::endl;
@@ -352,25 +352,25 @@ struct knn_index {
     return new_G;
   }
 
-  void check_deletes_correct(Graph &G) {
-    parlay::parallel_for(0, v.size(), [&](size_t i) {
-      if (old_delete_set.find(i) == old_delete_set.end()) {
-        auto current_vtx = G.get_vertex(i);
-        auto g = [&](node_id a) {
-          return (old_delete_set.find(a) != old_delete_set.end());
-        };
-        parlay::sequence<node_id> remaining_nbh;
-        auto f = [&](node_id u, node_id v, empty_weight wgh) {
-          if (g(v)) {
-            std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
-                      << std::endl;
-          }
-          return true;
-        };
-        current_vtx.out_neighbors().foreach_cond(f);
-      }
-    });
-  }
+  // void check_deletes_correct(Graph &G) {
+  //   parlay::parallel_for(0, v.size(), [&](size_t i) {
+  //     if (old_delete_set.find(i) == old_delete_set.end()) {
+  //       auto current_vtx = G.get_vertex(i);
+  //       auto g = [&](node_id a) {
+  //         return (old_delete_set.find(a) != old_delete_set.end());
+  //       };
+  //       parlay::sequence<node_id> remaining_nbh;
+  //       auto f = [&](node_id u, node_id v, empty_weight wgh) {
+  //         if (g(v)) {
+  //           std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
+  //                     << std::endl;
+  //         }
+  //         return true;
+  //       };
+  //       current_vtx.out_neighbors().foreach_cond(f);
+  //     }
+  //   });
+  // }
 
   // updated version by Guy
 std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
@@ -384,7 +384,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
   auto less = [&](pid a, pid b) {
       return a.second < b.second || (a.second == b.second && a.first < b.first); };
   auto make_pid = [&](node_id q) -> std::pair<node_id, double> {
-      auto dist = distance(vvc+q*stride, p_coords, d);
+      auto dist = D->distance(vvc+q*stride, p_coords, d);
       return std::pair{q, dist};
     };
 
@@ -456,7 +456,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
       auto p_vertex = GG.get_vertex(p_id);
       auto map_f = [&](node_id u, node_id neighbor_id, empty_weight weight) {
         candidates.push_back(std::make_pair(
-            neighbor_id, distance(v[neighbor_id]->coordinates.begin(),
+            neighbor_id, D->distance(v[neighbor_id]->coordinates.begin(),
                                   p->coordinates.begin(), d)));
         return true;
       };
@@ -495,7 +495,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
       for (size_t i = candidate_idx; i < candidates.size(); i++) {
         node_id p_prime = candidates[i].first;
         if (p_prime != std::numeric_limits<node_id>::max()) {
-          float dist_starprime = distance(v[p_star]->coordinates.begin(),
+          float dist_starprime = D->distance(v[p_star]->coordinates.begin(),
                                           v[p_prime]->coordinates.begin(), d);
           float dist_pprime = candidates[i].second;
           if (alpha * dist_starprime <= dist_pprime) {
@@ -519,7 +519,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
     cc.reserve(candidates.size() + p_ngh_size);
     for (size_t i = 0; i < candidates.size(); ++i) {
       cc.push_back(std::make_pair(
-          candidates[i], distance(v[candidates[i]]->coordinates.begin(),
+          candidates[i], D->distance(v[candidates[i]]->coordinates.begin(),
                                   p->coordinates.begin(), d)));
     }
     robustPrune(GG, p, p_id, std::move(cc), alpha, new_nghs, add);
@@ -746,7 +746,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
   }
 
   // TODO(laxmand): Why fvec point here?
-  tvec_point* medoid_helper(fvec_point* centroid, slice_tvec a) {
+  tvec_point* medoid_helper(tvec_point* centroid, slice_tvec a) {
     if (a.size() == 1) {
       return a[0];
     } else {
@@ -757,9 +757,9 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
           n > 1000, [&]() { a1 = medoid_helper(centroid, a.cut(0, n / 2)); },
           [&]() { a2 = medoid_helper(centroid, a.cut(n / 2, n)); });
       float d1 =
-          distance(centroid->coordinates.begin(), a1->coordinates.begin(), d);
+          D->distance(centroid->coordinates.begin(), a1->coordinates.begin(), d);
       float d2 =
-          distance(centroid->coordinates.begin(), a2->coordinates.begin(), d);
+          D->distance(centroid->coordinates.begin(), a2->coordinates.begin(), d);
       if (d1 < d2)
         return a1;
       else
@@ -771,10 +771,13 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
   // closest to the centroid
   node_id find_approx_medoid() {
     parlay::sequence<float> centroid = centroid_helper(parlay::make_slice(v));
-    fvec_point centroidp = Tvec_point<float>();
-    centroidp.coordinates = parlay::make_slice(centroid);
-    medoid = medoid_helper(&centroidp, parlay::make_slice(v));
-    std::cout << "Medoid ID: " << medoid->id << std::endl;
+    auto c = parlay::tabulate(centroid.size(), [&] (size_t i){
+			return static_cast<T>(centroid[i]);
+		});
+		tvec_point centroidp = tvec_point();
+		centroidp.coordinates = parlay::make_slice(c);
+		medoid = medoid_helper(&centroidp, parlay::make_slice(v));
+		std::cout << "Medoid ID: " << medoid->id << std::endl;
     return medoid->id;
   }
 

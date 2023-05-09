@@ -43,83 +43,89 @@ std::pair<char*, size_t> mmapStringFromFile(const char* filename) {
   return std::make_pair(p, n);
 }
 
-auto parse_fvecs(const char* filename) {
-  auto [fileptr, length] = mmapStringFromFile(filename);
+// *************************************************************
+//  BINARY TOOLS: uint8, int8, float32, int32
+// *************************************************************
 
-  // Each vector is 4 + 4*d bytes.
-  // * first 4 bytes encode the dimension (as an integer)
-  // * next d values are floats representing vector components
-  // See http://corpus-texmex.irisa.fr/ for more details.
+auto parse_uint8bin(const char* filename){
+    auto [fileptr, length] = mmapStringFromFile(filename);
 
-  int d = *((int*)fileptr);
+    int num_vectors = *((int*) fileptr);
+    int d = *((int*) (fileptr+4));
 
-  size_t vector_size = 4 + 4*d;
-  size_t num_vectors = length / vector_size;
-  // std::cout << "Num vectors = " << num_vectors << std::endl;
+    std::cout << "Detected " << num_vectors << " points with dimension " << d << std::endl;
+    parlay::sequence<Tvec_point<uint8_t>> points(num_vectors);
 
-  parlay::sequence<Tvec_point<float>> points(num_vectors);
+    parlay::parallel_for(0, num_vectors, [&] (size_t i) {
+        points[i].id = i; 
 
-  parlay::parallel_for(0, num_vectors, [&] (size_t i) {
-    size_t offset_in_bytes = vector_size * i + 4;  // skip dimension
-    float* start = (float*)(fileptr + offset_in_bytes);
-    float* end = start + d;
-    points[i].id = i;
-    points[i].coordinates = parlay::make_slice(start, end);
-  });
+        uint8_t* start = (uint8_t*)(fileptr + 8 + i*d); //8 bytes at the start for size + dimension
+        uint8_t* end = start + d;
+        points[i].coordinates = parlay::make_slice(start, end);
+    });
 
-  return points;
+    return points;
 }
 
-auto parse_ivecs(const char* filename) {
-  auto [fileptr, length] = mmapStringFromFile(filename);
+auto parse_int8bin(const char* filename){
+    auto [fileptr, length] = mmapStringFromFile(filename);
 
-  // Each vector is 4 + 4*d bytes.
-  // * first 4 bytes encode the dimension (as an integer)
-  // * next d values are floats representing vector components
-  // See http://corpus-texmex.irisa.fr/ for more details.
+    int num_vectors = *((int*) fileptr);
+    int d = *((int*) (fileptr+4));
 
-  int d = *((int*)fileptr);
+    std::cout << "Detected " << num_vectors << " points with dimension " << d << std::endl;
+    parlay::sequence<Tvec_point<int8_t>> points(num_vectors);
 
-  size_t vector_size = 4 + 4*d;
-  size_t num_vectors = length / vector_size;
+    parlay::parallel_for(0, num_vectors, [&] (size_t i) {
+        points[i].id = i; 
 
-  parlay::sequence<ivec_point> points(num_vectors);
+        int8_t* start = (int8_t*)(fileptr + 8 + i*d); //8 bytes at the start for size + dimension
+        int8_t* end = start + d;
+        points[i].coordinates = parlay::make_slice(start, end);
+    });
 
-  parlay::parallel_for(0, num_vectors, [&] (size_t i) {
-    size_t offset_in_bytes = vector_size * i + 4;  // skip dimension
-    int* start = (int*)(fileptr + offset_in_bytes);
-    int* end = start + d;
-    points[i].id = i;
-    points[i].coordinates = parlay::make_slice(start, end);
-  });
-
-  return points;
+    return points;
 }
 
-auto parse_bvecs(const char* filename) {
+auto parse_fbin(const char* filename){
+    auto [fileptr, length] = mmapStringFromFile(filename);
 
-  auto [fileptr, length] = mmapStringFromFile(filename);
-  // Each vector is 4 + d bytes.
-  // * first 4 bytes encode the dimension (as an integer)
-  // * next d values are unsigned chars representing vector components
-  // See http://corpus-texmex.irisa.fr/ for more details.
+    int num_vectors = *((int*) fileptr);
+    int d = *((int*) (fileptr+4));
 
-  int d = *((int*)fileptr);
-  // std::cout << "Dimension = " << d << std::endl;
+    std::cout << "Detected " << num_vectors << " points with dimension " << d << std::endl;
+    parlay::sequence<Tvec_point<float>> points(num_vectors);
 
-  size_t vector_size = 4 + d;
-  size_t num_vectors = length / vector_size;
+    parlay::parallel_for(0, num_vectors, [&] (size_t i) {
+        points[i].id = i; 
 
-  parlay::sequence<Tvec_point<uint8_t>> points(num_vectors);
+        float* start = (float*)(fileptr + 8 + 4*i*d); //8 bytes at the start for size + dimension
+        float* end = start + d;
+        points[i].coordinates = parlay::make_slice(start, end);
+    });
 
-  parlay::parallel_for(0, num_vectors, [&] (size_t i) {
-    size_t offset_in_bytes = vector_size * i + 4;  // skip dimension
-    uint8_t* start = (uint8_t*)(fileptr + offset_in_bytes);
-    uint8_t* end = start + d;
-    points[i].id = i;
-    points[i].coordinates = parlay::make_slice(start, end);
-  });
-
-  return points;
+    return points;
 }
 
+auto parse_ibin(const char* filename){
+    auto [fileptr, length] = mmapStringFromFile(filename);
+
+    int num_vectors = *((int*) fileptr);
+    int d = *((int*) (fileptr+4));
+
+    std::cout << "Detected " << num_vectors << " points with number of results " << d << std::endl;
+    parlay::sequence<ivec_point> points(num_vectors);
+
+    parlay::parallel_for(0, num_vectors, [&] (size_t i) {
+        points[i].id = i; 
+
+        int* start = (int*)(fileptr + 8 + 4*i*d); //8 bytes at the start for size + dimension
+        int* end = start + d;
+        float* dist_start = (float*)(fileptr+ 8 + num_vectors*4*d + 4*i*d);
+        float* dist_end = dist_start+d; 
+        points[i].coordinates = parlay::make_slice(start, end);
+        points[i].distances = parlay::make_slice(dist_start, dist_end);
+    });
+
+    return points;
+}
