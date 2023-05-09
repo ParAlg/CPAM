@@ -16,7 +16,13 @@
 
 atomic_sum_counter<size_t> distance_calls;
 
-namespace efanna2e {
+
+extern bool report_stats;
+
+namespace efanna2e{
+
+  // atomic_sum_counter<size_t> distance_calls;
+  
   enum Metric{
     L2 = 0,
     INNER_PRODUCT = 1,
@@ -332,38 +338,75 @@ namespace efanna2e {
   };
 }
 
+class Distance{
+  public:
+    virtual std::string id(){return "generic";}
+    virtual float distance(uint8_t *p, uint8_t *q, unsigned d){return 0;}
+    virtual float distance(int8_t *p, int8_t *q, unsigned d){return 0;}
+    virtual float distance(float *p, float *q, unsigned d){return 0;}
 
-float distance(uint8_t *p, uint8_t *q, unsigned d){
-#ifdef STATS
-  distance_calls.update_value(1);
-#endif
-  float result = 0;
-  for(unsigned i=0; i<d; i++){
-    result += ((int32_t)((int16_t) q[i] - (int16_t) p[i])) *
-                  ((int32_t)((int16_t) q[i] - (int16_t) p[i]));
+};
+
+struct Mips_Distance : public Distance{
+
+  std::string id(){return "mips";}
+
+  float distance(uint8_t *p, uint8_t *q, unsigned d){
+    int result = 0;
+    for(unsigned i=0; i<d; i++){
+      result += ((int32_t) q[i]) *
+                    ((int32_t) p[i]);
+    }
+    return -((float) result);
   }
-  return result;
-}
 
-float distance(float *q, uint8_t *p, unsigned d){
-#ifdef STATS
-  distance_calls.update_value(1);
-#endif
-  float result = 0;
-  for(unsigned i=0; i<d; i++){
-    result += (q[i] - (float) p[i]) *
-                  (q[i] - (float) p[i]);
+  float distance(int8_t *p, int8_t *q, unsigned d){
+    int result = 0;
+    for(unsigned i=0; i<d; i++){
+      result += ((int32_t) q[i]) *
+                    ((int32_t) p[i]);
+    }
+    return -((float) result);
   }
-  return result;
-}
 
-float distance(float *p, float *q, unsigned d){
-#ifdef STATS
-    distance_calls.update_value(1);
-#endif
-    efanna2e::DistanceL2 distfunc;
-    return distfunc.compare(p, q, d);
-}
+  float distance(float *p, float *q, unsigned d){
+      float result = 0;
+      for(unsigned i=0; i<d; i++){
+        result += (q[i]) * (p[i]);
+      }
+      return -result;
+  }
+
+};
+
+struct Euclidian_Distance : public Distance{
+
+  std::string id(){return "euclidian";}
+
+  float distance(uint8_t *p, uint8_t *q, unsigned d){
+    int result = 0;
+    for(unsigned i=0; i<d; i++){
+      result += ((int32_t)((int16_t) q[i] - (int16_t) p[i])) *
+                    ((int32_t)((int16_t) q[i] - (int16_t) p[i]));
+    }
+    return (float) result;
+  }
+
+  float distance(int8_t *p, int8_t *q, unsigned d){
+    int result = 0;
+    for(unsigned i=0; i<d; i++){
+      result += ((int32_t)((int16_t) q[i] - (int16_t) p[i])) *
+                    ((int32_t)((int16_t) q[i] - (int16_t) p[i]));
+    }
+    return (float) result;
+  }
+
+  float distance(float *p, float *q, unsigned d){
+      efanna2e::DistanceL2 distfunc;
+      return distfunc.compare(p, q, d);
+  }
+};
+
 
 
 #endif //EFANNA2E_DISTANCE_H
