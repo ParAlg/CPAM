@@ -27,6 +27,7 @@ struct knn_index {
 
   struct empty_weight {};
   using Graph = aspen::symmetric_graph<empty_weight>;
+  using vertex = typename Graph::vertex;  
   using edge_tree = typename Graph::edge_tree;
   using edge_node = typename Graph::edge_node;
   using vertex_tree = typename Graph::vertex_tree;
@@ -240,7 +241,8 @@ struct knn_index {
   void consolidate_deletes(parlay::sequence<node_id> to_consolidate) {
     if(epoch_running){
       auto S = VG.acquire_version();
-      Graph new_G = consolidate_deletes_with_pruning(S.graph, to_consolidate);
+      // Graph new_G = consolidate_deletes_with_pruning(S.graph, to_consolidate);
+      Graph new_G = consolidate_deletes_simple(S.graph);
       VG.add_version_from_graph(new_G);
       VG.release_version(std::move(S));
     }else{
@@ -249,6 +251,11 @@ struct knn_index {
     }
     
   }
+
+  node_id get_medoid(){
+    return medoid->id;
+  }
+
 
  private:
   std::set<node_id> delete_set;
@@ -273,7 +280,7 @@ struct knn_index {
           return old_delete_set.find(a) == old_delete_set.end();
         };
         auto f = [&](node_id u, node_id v, empty_weight wgh) {
-          if (g(v)) candidates.push_back(v);
+          if (g(v)) candidates.push_back(v);     
           return true;
         };
         current_vtx.out_neighbors().foreach_cond(f);
@@ -352,25 +359,39 @@ struct knn_index {
     return new_G;
   }
 
-  // void check_deletes_correct(Graph &G) {
-  //   parlay::parallel_for(0, v.size(), [&](size_t i) {
-  //     if (old_delete_set.find(i) == old_delete_set.end()) {
-  //       auto current_vtx = G.get_vertex(i);
-  //       auto g = [&](node_id a) {
-  //         return (old_delete_set.find(a) != old_delete_set.end());
-  //       };
-  //       parlay::sequence<node_id> remaining_nbh;
-  //       auto f = [&](node_id u, node_id v, empty_weight wgh) {
-  //         if (g(v)) {
-  //           std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
-  //                     << std::endl;
-  //         }
-  //         return true;
-  //       };
-  //       current_vtx.out_neighbors().foreach_cond(f);
-  //     }
-  //   });
-  // }
+  void check_deletes_correct(Graph &G) {
+    auto map = [&] (vertex current_vtx) {
+        auto g = [&](node_id a) {
+          return (old_delete_set.find(a) != old_delete_set.end());
+        };
+        auto f = [&](node_id u, node_id v, empty_weight wgh) {
+          if (g(v)) {
+            std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
+                      << std::endl;
+          }
+          return true;
+        };
+        current_vtx.out_neighbors().foreach_cond(f);
+    };
+    G.map_vertices(map);
+    // parlay::parallel_for(0, v.size(), [&](size_t i) {
+    //   if (old_delete_set.find(i) == old_delete_set.end()) {
+    //     auto current_vtx = G.get_vertex(i);
+    //     auto g = [&](node_id a) {
+    //       return (old_delete_set.find(a) != old_delete_set.end());
+    //     };
+    //     parlay::sequence<node_id> remaining_nbh;
+    //     auto f = [&](node_id u, node_id v, empty_weight wgh) {
+    //       if (g(v)) {
+    //         std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
+    //                   << std::endl;
+    //       }
+    //       return true;
+    //     };
+    //     current_vtx.out_neighbors().foreach_cond(f);
+    //   }
+    // });
+  }
 
   // updated version by Guy
 std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
@@ -780,6 +801,7 @@ std::pair<parlay::sequence<pid>, parlay::sequence<pid>> beam_search(
 		std::cout << "Medoid ID: " << medoid->id << std::endl;
     return medoid->id;
   }
+
 
   // parlay::sequence<node_id> all_distances_sorted(node_id sample_id) {
   //   size_t n = G.num_vertices();
