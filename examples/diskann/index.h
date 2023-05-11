@@ -242,7 +242,7 @@ struct knn_index {
     if(epoch_running){
       auto S = VG.acquire_version();
       // Graph new_G = consolidate_deletes_with_pruning(S.graph, to_consolidate);
-      Graph new_G = consolidate_deletes_simple(S.graph);
+      Graph new_G = consolidate_deletes_with_pruning(S.graph, to_consolidate);
       VG.add_version_from_graph(new_G);
       VG.release_version(std::move(S));
     }else{
@@ -271,6 +271,7 @@ struct knn_index {
   Graph consolidate_deletes_simple(Graph G) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
+    auto needs_consolidate = parlay::sequence<bool>(v.size(), false);
 
     parlay::parallel_for(0, v.size(), [&](size_t i) {
       if (old_delete_set.find(i) == old_delete_set.end()) {
@@ -287,11 +288,14 @@ struct knn_index {
         auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
         auto tree = edge_tree(begin, begin + candidates.size());
         consolidated_vertices[i] = {i, tree.root};
+        needs_consolidate[i] = true;
         tree.root = nullptr;
       }
     });
-    Graph new_G = G.insert_vertices_batch_functional(consolidated_vertices.size(),
-                            consolidated_vertices.begin());
+    auto filtered_vertices =
+        parlay::pack(consolidated_vertices, needs_consolidate);
+    Graph new_G = G.insert_vertices_batch_functional(filtered_vertices.size(),
+                            filtered_vertices.begin());
     return new_G;
   }
 
@@ -300,7 +304,7 @@ struct knn_index {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(
             to_consolidate.size());
-    std::vector<bool> needs_consolidate(to_consolidate.size(), false);
+    auto needs_consolidate = parlay::sequence<bool>(to_consolidate.size(), false);
 
     parlay::parallel_for(0, to_consolidate.size(), [&](size_t i) {
       node_id index = to_consolidate[i];
@@ -374,23 +378,6 @@ struct knn_index {
         current_vtx.out_neighbors().foreach_cond(f);
     };
     G.map_vertices(map);
-    // parlay::parallel_for(0, v.size(), [&](size_t i) {
-    //   if (old_delete_set.find(i) == old_delete_set.end()) {
-    //     auto current_vtx = G.get_vertex(i);
-    //     auto g = [&](node_id a) {
-    //       return (old_delete_set.find(a) != old_delete_set.end());
-    //     };
-    //     parlay::sequence<node_id> remaining_nbh;
-    //     auto f = [&](node_id u, node_id v, empty_weight wgh) {
-    //       if (g(v)) {
-    //         std::cout << "ERROR: vertex " << u << " has deleted neighbor " << v
-    //                   << std::endl;
-    //       }
-    //       return true;
-    //     };
-    //     current_vtx.out_neighbors().foreach_cond(f);
-    //   }
-    // });
   }
 
   // updated version by Guy
