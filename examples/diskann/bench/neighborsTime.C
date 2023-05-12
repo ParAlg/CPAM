@@ -16,12 +16,9 @@
 #include "../IO.h"
 // #include "../index.h"
 #include "../types.h"
-#include "../writeSeq.h"
 // #include "util/check_nn_recall.h"
 
 bool report_stats;
-
-using namespace benchIO;
 
 template <class F, class G, class H>
 void time_loop(int rounds, double delay, F initf, G runf, H endf) {
