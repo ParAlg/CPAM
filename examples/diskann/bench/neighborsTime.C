@@ -16,13 +16,19 @@
 #include "../IO.h"
 // #include "../index.h"
 #include "../types.h"
+<<<<<<< HEAD
 // #include "../writeSeq.h"
+=======
+>>>>>>> 6b201d31f1299636a8119719c338df5e3ca66051
 // #include "util/check_nn_recall.h"
 
 bool report_stats;
 
+<<<<<<< HEAD
 // using namespace benchIO;
 
+=======
+>>>>>>> 6b201d31f1299636a8119719c338df5e3ca66051
 template <class F, class G, class H>
 void time_loop(int rounds, double delay, F initf, G runf, H endf) {
   parlay::internal::timer t;

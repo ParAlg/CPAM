@@ -147,7 +147,7 @@ struct versioned_graph {
           // no longer possible for new readers to acquire
           if (root) { // might be an empty graph
             if (Tree::ref_cnt(root) != 1) {
-              std::cout << "Bad ref_cnt when deleting version." << std::endl;
+              std::cout << "Bad ref_cnt when deleting version " << " with timestamp " << timestamp << " and ref count " << Tree::ref_cnt(root) << std::endl;
               exit(0);
             }
             Node_GC::decrement_recursive(root);
