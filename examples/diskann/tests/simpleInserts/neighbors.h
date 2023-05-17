@@ -29,7 +29,7 @@ struct test_graph{
   using vertex_node = typename Graph::vertex_node;
   aspen::versioned_graph<Graph> VG;
 
-  void insert(size_t n, parlay::sequence<node_id> inserts, parlay::sequence<node_id> prev_inserts){
+  void insert_and_modify(size_t n, parlay::sequence<node_id> inserts, parlay::sequence<node_id> prev_inserts){
     auto S = VG.acquire_version();
     std::cout << "Acquired version with timestamp " << S.timestamp
               << " address = " << ((size_t)S.get_root())
@@ -46,13 +46,16 @@ struct test_graph{
       }
     });
 
+    //first do a functional update
     std::cout << "Performing functional update: update size = "
               << init_inserts.size() << std::endl;
     Graph new_G = insert_functional(S.graph, n, init_inserts);
+    //insert the rest of the vertices inplace
     std::cout << "Performing inplace update on node: "
               << ((size_t)new_G.get_root()) << std::endl;
     std::cout << "Performing inplace update of size: " << remaining_inserts.size() << std::endl;
     insert_inplace(new_G, n, remaining_inserts);
+    //do some updates on other edges in the graph
     modify_edges(new_G, prev_inserts, n);
     std::cout << "Posting new version " << std::endl;
     VG.add_version_from_graph(std::move(new_G));
@@ -83,16 +86,6 @@ struct test_graph{
     return new_G;
   }
 
-  void access_edges(Graph &G, parlay::sequence<node_id> to_access){
-    parlay::parallel_for(0, to_access.size(), [&] (size_t i){
-      auto vtx = G.get_vertex(to_access[i]);
-      auto f = [&] (node_id u, node_id v, empty_weight wgh) {
-        auto hh = v; 
-        return true;
-      };
-      vtx.out_neighbors().foreach_cond(f);
-    });
-  }
 
   void modify_edges(Graph &G, parlay::sequence<node_id> to_modify, node_id n){
     parlay::random_generator gen;
@@ -150,10 +143,17 @@ struct test_graph{
     VG = aspen::versioned_graph<Graph>(std::move(Initial_Graph));
   }
 
-  
+  //the query function has to traverse the edges of each point to try to trigger any problems
   void query(parlay::sequence<node_id> to_query){
     auto S = VG.acquire_version();
-    access_edges(S.graph, to_query);
+    parlay::parallel_for(0, to_query.size(), [&] (size_t i){
+      auto vtx = S.graph.get_vertex(to_query[i]);
+      auto f = [&] (node_id u, node_id v, empty_weight wgh) {
+        auto hh = v; 
+        return true;
+      };
+      vtx.out_neighbors().foreach_cond(f);
+    });
     VG.release_version(std::move(S));
   }
 };
@@ -169,13 +169,13 @@ void ANN(parlay::sequence<Tvec_point<T>*> &v, int maxDeg, int beamSize,
     TG.build(0);
     auto inserts = parlay::tabulate(100000, [&] (node_id j) {return j+1;});
     auto prev_edges = {(node_id) 0};
-    TG.insert(max_size, inserts, prev_edges);
+    TG.insert_and_modify(max_size, inserts, prev_edges);
 
     auto updater = [&] () {
       for(int i=1; i<10; i++){
-        auto prev_inserts = parlay::tabulate(100000, [&] (node_id j) {return j;});
+        auto ids_to_modify = parlay::tabulate(100000, [&] (node_id j) {return j;}); //these are already present in the graph
         auto inserts = parlay::tabulate(100000, [&] (node_id j) {return 100000* (node_id) (i)+1+j;});
-        TG.insert(max_size, inserts, prev_inserts);
+        TG.insert_and_modify(max_size, inserts, ids_to_modify);
       }
     };
 
