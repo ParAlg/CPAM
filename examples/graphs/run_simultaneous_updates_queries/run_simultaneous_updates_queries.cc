@@ -97,7 +97,6 @@ double SimultaneousUpdatesQueries_runner(Graph& G, cpam::commandLine P) {
   size_t n = G.num_vertices();
   size_t gran = 10;
 
-  G.set_num_vertices(131341);
   pbbs::random r;
   double a = 0.5;
   double b = 0.1;
@@ -137,7 +136,6 @@ double SimultaneousUpdatesQueries_runner(Graph& G, cpam::commandLine P) {
   auto acquire_version = [&] () {
     std::cout << "about to acquire..." << std::endl;
     auto vv = VG.acquire_version();
-    vv.graph.set_num_vertices(n);
     return vv;
   };
 
