@@ -390,6 +390,7 @@ struct symmetric_graph {
       t.root = cur;  // Lets the ref-cnt get decremented here.
       return inc;
     };
+    std::cout << "Multiinsert size: " << E_slice.size() << std::endl;
     auto new_V = vertex_tree::multi_insert_sorted(V, E_slice, combine_op);
     return SymGraph(std::move(new_V));
   }

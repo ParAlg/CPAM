@@ -71,10 +71,17 @@ void ANN(parlay::sequence<Tvec_point<T>*>& v, int maxDeg, int beamSize,
       });
       I.query(queries, k, Q);
       std::cout << "Finished query batch" << std::endl;
+      // std::this_thread::sleep_for(std::chrono::milliseconds(4000));
     }
   };
 
   auto empty = [&]() {};
+
+//  updater();
+//
+//  std::cout << "Finished updates" << std::endl;
+//
+//  queries();
 
   parlay::par_do(updater, queries);
 

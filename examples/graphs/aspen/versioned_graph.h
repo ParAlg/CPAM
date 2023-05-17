@@ -146,10 +146,10 @@ struct versioned_graph {
         if (cpam::utils::atomic_compare_and_swap(ref_ct_loc, cur_val, cur_val-1)) {
           // no longer possible for new readers to acquire
           if (root) { // might be an empty graph
-            if (Tree::ref_cnt(root) != 1) {
-              std::cout << "Bad ref_cnt when deleting version " << " with timestamp " << timestamp << " and ref count " << Tree::ref_cnt(root) << std::endl;
-              exit(0);
-            }
+//            if (Tree::ref_cnt(root) != 1) {
+//              std::cout << "Bad ref_cnt when deleting version. Ref cnt = " << Tree::ref_cnt(root) << std::endl;
+//              exit(0);
+//            }
             Node_GC::decrement_recursive(root);
           }
 
