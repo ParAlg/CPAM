@@ -287,6 +287,8 @@ struct knn_index {
   // beamSize: (similar to ef)
   // d: dimensionality of the indexed vectors
 
+
+
   Graph consolidate_deletes_simple(Graph G) {
     auto consolidated_vertices =
         parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
@@ -476,7 +478,13 @@ struct knn_index {
 #ifdef STATS
     total_visited.update_value(visited.size());
 #endif
-    return std::make_pair(frontier, parlay::to_sequence(visited));
+    //TODO should we also lock the current delete set and filter those elements out?
+    parlay::sequence<pid> to_filter = parlay::to_sequence(visited);
+    auto f = [&] (pid a){
+      return old_delete_set.find(a.first) == old_delete_set.end();
+    };
+    auto filtered = parlay::filter(to_filter, f);
+    return std::make_pair(frontier, std::move(filtered));
   }
 
   // robustPrune routine as found in DiskANN paper.
@@ -640,7 +648,6 @@ struct knn_index {
         auto tree = edge_tree(begin, begin + nghs_size);
         auto tree_ptr = tree.root;
         tree.root = nullptr;
-
         return std::make_tuple(index, tree_ptr);
       });
 
