@@ -64,7 +64,7 @@ auto parse_uint8bin(const char* filename){
         points[i].coordinates = parlay::make_slice(start, end);
     });
 
-    return points;
+    return std::move(points);
 }
 
 auto parse_int8bin(const char* filename){
@@ -84,7 +84,7 @@ auto parse_int8bin(const char* filename){
         points[i].coordinates = parlay::make_slice(start, end);
     });
 
-    return points;
+    return std::move(points);
 }
 
 auto parse_fbin(const char* filename){
@@ -104,7 +104,7 @@ auto parse_fbin(const char* filename){
         points[i].coordinates = parlay::make_slice(start, end);
     });
 
-    return points;
+    return std::move(points);
 }
 
 auto parse_ibin(const char* filename){
@@ -127,5 +127,5 @@ auto parse_ibin(const char* filename){
         points[i].distances = parlay::make_slice(dist_start, dist_end);
     });
 
-    return points;
+    return std::move(points);
 }

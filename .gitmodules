@@ -1,3 +1,9 @@
 [submodule "parlaylib"]
 	path = parlaylib
 	url = https://github.com/cmuparlay/parlaylib.git
+[submodule "flock"]
+	path = flock
+	url = git@github.com:cmuparlay/flock.git
+[submodule "flock-private"]
+	path = flock-private
+	url = git@github.com:cmuparlay/flock-private.git

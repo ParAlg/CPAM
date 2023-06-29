@@ -43,15 +43,14 @@ nn_result checkRecall(
   int r = 10;
 
   float query_time;
-  parlay::sequence<parlay::sequence<unsigned>> query_results(q.size());
-  parlay::parallel_for(0, q.size(), [&](size_t i) {
-    query_results[i] = I.query(q[i]->coordinates.begin(), k, beamQ, cut);
-  });
+  parlay::sequence<parlay::sequence<node_id>> query_results(q.size());
+  parlay::parallel_for(0, q.size(), [&](size_t i){query_results[i]=parlay::sequence<node_id>(k);});
+  I.query(q, k, beamQ, cut, query_results);
   // std::cout << "first set" << std::endl;
+
   t.next_time();
-  parlay::parallel_for(0, q.size(), [&](size_t i) {
-    I.query(q[i]->coordinates.begin(), k, beamQ, cut);
-  });
+  I.query(q, k, beamQ, cut, query_results);
+
   query_time = t.next_time();
   // std::cout << "second set" << std::endl;
   float recall = 0.0;

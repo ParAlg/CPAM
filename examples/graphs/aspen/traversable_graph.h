@@ -360,6 +360,7 @@ struct traversable_graph : private graph {
     }
   }
 
+  //TODO does this only work if the vertices are densely packed?
   parlay::sequence<edge_node*> fetch_all_vertices() {
     size_t n = G::num_vertices();
     auto vtxs = parlay::sequence<edge_node*>(n, nullptr);

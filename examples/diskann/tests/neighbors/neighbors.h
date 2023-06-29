@@ -36,6 +36,8 @@ void ANN(parlay::sequence<Tvec_point<T>*> &v, int maxDeg, int beamSize,
 
 //v, k, R, beamSize, beamSizeQ, alpha, qpts, groundTruth, res_file, D
 
+
+
 template <typename T>
 void ANN(parlay::sequence<Tvec_point<T>*> &v, int k, int maxDeg,
   int beamSize, int Q, double alpha,
