@@ -2,7 +2,7 @@
 #include <optional>
 #include <string.h>
 
-#include <parlay/internal/binary_search.h>
+#include "parlay/internal/binary_search.h"
 
 // *******************************************
 //   Utils
