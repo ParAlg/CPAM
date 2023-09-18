@@ -39,7 +39,7 @@ cc_library(
   ":byte_encode",
   ":compression",
   ":utils",
-  "//parlaylib/include/parlay:alloc",
+  "@parlaylib//parlay:alloc",
   ]
 )
 
@@ -56,7 +56,7 @@ cc_library(
   hdrs = ["build.h"],
   deps = [
   ":get_time",
-  "//parlaylib/include/parlay:primitives",
+  "@parlaylib//parlay:primitives",
   ]
 )
 
@@ -98,8 +98,8 @@ cc_library(
   hdrs = ["map_ops.h"],
   deps = [
   ":utils",
-  "//parlaylib/include/parlay:primitives",
-  "//parlaylib/include/parlay/internal:binary_search",
+  "@parlaylib//parlay:primitives",
+  "@parlaylib//parlay/internal:binary_search",
   ]
 )
 
@@ -118,7 +118,7 @@ cc_library(
   ":build",
   ":map",
   ":augmented_map",
-  "//parlaylib/include/parlay:utilities",
+  "@parlaylib//parlay:utilities",
   ]
 )
 
