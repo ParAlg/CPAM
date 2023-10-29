@@ -225,20 +225,20 @@ public:
   // insertion, updates, and deletion
   template <class Func>
   static M insert(M m, const E& p, const Func& f) {
-    return M(Tree::insert(m.get_root(), p, f));
+    return M(Tree::finalize(Tree::insert(m.get_root(), p, f)));
   }
 
   template <class Func>
   void insert(const E& p, const Func& f) {
-    root = Tree::insert(root, p, f); }
+    root = Tree::finalize(Tree::insert(root, p, f)); }
 
   static M insert(M m, const E& p) {
     auto replace = [] (const V& a, const V& b) {return b;};
-    return M(Tree::insert(m.get_root(), p, replace)); }
+    return M(Tree::finalize(Tree::insert(m.get_root(), p, replace))); }
 
   void insert(const E& p) {
     auto replace = [] (const V& a, const V& b) {return b;};
-    root = Tree::insert(root, p, replace); }
+    root = Tree::finalize(Tree::insert(root, p, replace)); }
 
   template <class Func>
   void update(const K& k, const Func& f) {
