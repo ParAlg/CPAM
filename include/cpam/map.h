@@ -731,22 +731,24 @@ using diff_encoded_map = pam_map<_Entry, BlockSize, diffencoded_entry_encoder, B
 template <class entry>
 struct set_full_entry : entry {
   using key_t = typename entry::key_t;
-  using val_t = bool;  // not used
+  using val_t = parlay::empty;  // not used
   using entry_t = key_t;
   static inline key_t get_key(const entry_t& e) { return e; }
-  static inline val_t get_val(const entry_t& e) { return 0; }
+  static inline val_t get_val(const entry_t& e) { return {}; }
   static inline void set_val(entry_t& e, const val_t& v) {}
   static inline entry_t to_entry(const key_t& k, const val_t& v) {
     return k;
   };
 };
 
-template <class _Entry, size_t BlockSize=256, class Encoder=default_entry_encoder, class Balance = weight_balanced_tree>
+template <class _Entry, size_t BlockSize = 256,
+          class Encoder = default_entry_encoder,
+          class Balance = weight_balanced_tree>
 using pam_set =
     map_<set_full_entry<_Entry>,
          typename Balance::template balance<basic_node<
-             typename Balance::data,
-             typename _Entry::key_t,
+             typename Balance::data, 
+             typename set_full_entry<_Entry>::entry_t,
              typename Encoder::template encoder<set_full_entry<_Entry>>,
              BlockSize>>>;
 

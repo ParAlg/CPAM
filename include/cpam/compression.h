@@ -103,14 +103,14 @@ struct diffencoded_entry_encoder {
     }
 
     template <class F>
-    static inline bool decode_cond(uint8_t* bytes, uint32_t size, const F& f) {
+    static inline bool decode_cond(uint8_t* bytes, size_t size, const F& f) {
       V* vals = (V*)bytes;
-      uint8_t* key_bytes = (bytes + size*sizeof(V));
+      uint8_t* key_bytes = (bytes + size * sizeof(V));
 
       K prev_key = *((K*)key_bytes);
-      if (!Entry::to_entry(prev_key, vals[0])) return false;
+      if(!f(Entry::to_entry(prev_key, vals[0]))) return false;
       key_bytes += sizeof(K);
-      for (uint32_t i=1; i<size; i++) {
+      for (size_t i = 1; i < size; i++) {
         prev_key += decodeUnsigned<K>(key_bytes);
         if (!f(Entry::to_entry(prev_key, vals[i]))) return false;
       }
