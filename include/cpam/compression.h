@@ -107,15 +107,12 @@ struct diffencoded_entry_encoder {
       V* vals = (V*)bytes;
       uint8_t* key_bytes = (bytes + size*sizeof(V));
 
-      ET e;
-      std::get<0>(e) = *((K*)key_bytes);
-      std::get<1>(e) = vals[0];
-      if (!f(e)) return false;
+      K prev_key = *((K*)key_bytes);
+      if (!Entry::to_entry(prev_key, vals[0])) return false;
       key_bytes += sizeof(K);
       for (uint32_t i=1; i<size; i++) {
-        std::get<0>(e) += decodeUnsigned<K>(key_bytes);
-        std::get<1>(e) = vals[i];
-        if (!f(e)) return false;
+        prev_key += decodeUnsigned<K>(key_bytes);
+        if (!f(Entry::to_entry(prev_key, vals[i]))) return false;
       }
       return true;
     }
