@@ -394,7 +394,7 @@ struct traversable_graph : private graph {
                           bool remove_dups = false,
                           size_t nn = std::numeric_limits<size_t>::max(),
                           bool run_seq = false) {
-    G::insert_edges_batch_3(m, edges, sorted, remove_dups, nn, run_seq);
+    G::insert_edges_batch(m, edges, sorted, remove_dups, nn, run_seq);
   }
 
   template <class Edge>
@@ -402,8 +402,7 @@ struct traversable_graph : private graph {
                           bool remove_dups = false,
                           size_t nn = std::numeric_limits<size_t>::max(),
                           bool run_seq = false) {
-    // G::delete_edges_batch_1(m, edges, sorted, remove_dups, nn, run_seq);
-    G::delete_edges_batch_3(m, edges, sorted, remove_dups, nn, run_seq);
+    G::delete_edges_batch(m, edges, sorted, remove_dups, nn, run_seq);
   }
 
   // Only used when building compressed (large) graphs

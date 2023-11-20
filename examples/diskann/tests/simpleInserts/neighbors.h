@@ -61,9 +61,7 @@ struct test_graph{
       auto begin =
           (std::tuple<node_id, empty_weight>*)(new_nbh.begin());
       auto tree = edge_tree(begin, begin + nghs_size);
-      auto tree_ptr = tree.root;
-      tree.root = nullptr;
-      return std::make_tuple(index, tree_ptr);
+      return std::make_tuple(index, std::move(tree));
     });
     Graph new_G = G.insert_vertices_batch_functional(KVs.size(), KVs.begin());
     return new_G;
@@ -116,9 +114,7 @@ struct test_graph{
       auto begin =
           (std::tuple<node_id, empty_weight>*)(new_nbh.begin());
       auto tree = edge_tree(begin, begin + nghs_size);
-      auto tree_ptr = tree.root;
-      tree.root = nullptr;
-      return std::make_tuple(index, tree_ptr);
+      return std::make_tuple(index, std::move(tree));
     });
     G.insert_vertices_batch(KVs.size(), KVs.begin());
   }
@@ -144,9 +140,7 @@ struct test_graph{
       auto begin =
           (std::tuple<node_id, empty_weight>*)(new_nbh.begin());
       auto tree = edge_tree(begin, begin + nghs_size);
-      auto tree_ptr = tree.root;
-      tree.root = nullptr;
-      return std::make_tuple(index, tree_ptr);
+      return std::make_tuple(index, std::move(tree));
     });
     auto new_G = G.insert_vertices_batch_functional(KVs.size(), KVs.begin());
     return new_G;
