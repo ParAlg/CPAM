@@ -31,7 +31,6 @@ struct knn_index {
   using Graph = aspen::symmetric_graph<empty_weight>;
   using vertex = typename Graph::vertex;
   using edge_tree = typename Graph::edge_tree;
-  using edge_node = typename Graph::edge_node;
   using vertex_tree = typename Graph::vertex_tree;
   using vertex_node = typename Graph::vertex_node;
   using LockGuard = std::lock_guard<std::mutex>;
@@ -291,7 +290,7 @@ struct knn_index {
 
   Graph consolidate_deletes_simple(Graph G) {
     auto consolidated_vertices =
-        parlay::sequence<std::tuple<node_id, edge_node*>>(v.size());
+        parlay::sequence<std::tuple<node_id, edge_tree>>(v.size());
     auto needs_consolidate = parlay::sequence<bool>(v.size(), false);
 
     parlay::parallel_for(0, v.size(), [&](size_t i) {
@@ -308,9 +307,8 @@ struct knn_index {
         current_vtx.out_neighbors().foreach_cond(f);
         auto begin = (std::tuple<node_id, empty_weight>*)candidates.begin();
         auto tree = edge_tree(begin, begin + candidates.size());
-        consolidated_vertices[i] = {i, tree.root};
+        consolidated_vertices[i] = std::make_tuple(i, std::move(tree));
         needs_consolidate[i] = true;
-        tree.root = nullptr;
       }
     });
     auto filtered_vertices =
@@ -323,7 +321,7 @@ struct knn_index {
   Graph consolidate_deletes_with_pruning(
       Graph G, parlay::sequence<node_id>& to_consolidate) {
     auto consolidated_vertices =
-        parlay::sequence<std::tuple<node_id, edge_node*>>(
+        parlay::sequence<std::tuple<node_id, edge_tree>>(
             to_consolidate.size());
     auto needs_consolidate =
         parlay::sequence<bool>(to_consolidate.size(), false);
@@ -372,8 +370,7 @@ struct knn_index {
             size_t deg = size_of(output_slice);
             auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
             auto tree = edge_tree(begin, begin + deg);
-            consolidated_vertices[i] = {index, tree.root};
-            tree.root = nullptr;
+            consolidated_vertices[i] = std::make_tuple(index, std::move(tree));
           }
         }
       }
@@ -646,9 +643,7 @@ struct knn_index {
         auto begin =
             (std::tuple<node_id, empty_weight>*)(new_out.begin() + maxDeg * i);
         auto tree = edge_tree(begin, begin + nghs_size);
-        auto tree_ptr = tree.root;
-        tree.root = nullptr;
-        return std::make_tuple(index, tree_ptr);
+        return std::make_tuple(index, std::move(tree));
       });
 
       G.insert_vertices_batch(KVs.size(), KVs.begin());
@@ -658,7 +653,7 @@ struct knn_index {
       // TODO: update the code below:
       auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
       auto reverse_KVs =
-          parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
+          parlay::sequence<std::tuple<node_id, edge_tree>>(grouped_by.size());
 
       // std::cout << "Number of in-neighbors: " << grouped_by.size() <<
       // std::endl; finally, add the bidirectional edges; if they do not make
@@ -676,8 +671,7 @@ struct knn_index {
         size_t deg = size_of(output_slice);
         auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
         auto tree = edge_tree(begin, begin + deg);
-        reverse_KVs[j] = {index, tree.root};
-        tree.root = nullptr;
+        reverse_KVs[j] = std::make_tuple(index, std::move(tree));
       });
 
       // std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;
@@ -730,10 +724,7 @@ struct knn_index {
       auto begin =
           (std::tuple<node_id, empty_weight>*)(new_out.begin() + maxDeg * i);
       auto tree = edge_tree(begin, begin + nghs_size);
-      auto tree_ptr = tree.root;
-      tree.root = nullptr;
-
-      return std::make_tuple(index, tree_ptr);
+      return std::make_tuple(index, std::move(tree));
     });
 
     Graph new_G = G.insert_vertices_batch_functional(KVs.size(), KVs.begin());
@@ -743,7 +734,7 @@ struct knn_index {
     // TODO: update the code below:
     auto grouped_by = parlay::group_by_key(parlay::flatten(to_flatten));
     auto reverse_KVs =
-        parlay::sequence<std::tuple<node_id, edge_node*>>(grouped_by.size());
+        parlay::sequence<std::tuple<node_id, edge_tree>>(grouped_by.size());
 
     // std::cout << "Number of in-neighbors: " << grouped_by.size() <<
     // std::endl; finally, add the bidirectional edges; if they do not make the
@@ -760,8 +751,7 @@ struct knn_index {
       size_t deg = size_of(output_slice);
       auto begin = (std::tuple<node_id, empty_weight>*)new_out_2.begin();
       auto tree = edge_tree(begin, begin + deg);
-      reverse_KVs[j] = {index, tree.root};
-      tree.root = nullptr;
+      reverse_KVs[j] = std::make_tuple(index, std::move(tree));
     });
 
     std::cout << "ReverseKVs.size = " << reverse_KVs.size() << std::endl;

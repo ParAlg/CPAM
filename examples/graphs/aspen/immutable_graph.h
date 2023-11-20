@@ -231,7 +231,7 @@ struct symmetric_graph {
     using entry_t = typename vertex_entry::entry_t;
     auto map_f = [&](const entry_t& vtx_entry, size_t i) {
       const vertex_id& v = std::get<0>(vtx_entry);
-      auto vtx = vertex(v, std::get<1>(vtx_entry));
+      auto vtx = vertex(v, std::get<1>(vtx_entry).root);
       f(vtx);
     };
     vertex_tree::foreach_index(V, map_f, 0, 1);
