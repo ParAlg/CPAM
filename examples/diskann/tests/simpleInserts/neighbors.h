@@ -194,7 +194,12 @@ void ANN(parlay::sequence<Tvec_point<T>*> &v, int maxDeg, int beamSize,
       }
     };
 
-    parlay::par_do(updater, queries);
+    size_t p = parlay::num_workers();
+
+    parlay::par_do([&] {
+    parlay::execute_with_scheduler(p/10, queries);}, 
+    [&] {parlay::execute_with_scheduler((9*p)/10, updater);
+  }); 
   };
 }
 

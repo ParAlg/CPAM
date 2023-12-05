@@ -113,7 +113,6 @@ struct knn_index {
   void insert(parlay::sequence<node_id> inserts, bool random_order = false) {
     auto S = VG.acquire_version();
     std::cout << "Acquired version with timestamp " << S.timestamp
-              << " address = " << ((size_t)S.get_root())
               << " ref_cnt = " << S.get_ref_cnt() << std::endl;
 
     parlay::sequence<node_id> init_inserts({inserts[0]});
@@ -130,8 +129,6 @@ struct knn_index {
     std::cout << "Performing functional update: update size = "
               << init_inserts.size() << std::endl;
     Graph new_G = batch_insert_functional(S.graph, inserts);
-    std::cout << "Performing inplace update on node: "
-              << ((size_t)new_G.get_root()) << std::endl;
 
     batch_insert_inplace(new_G, remaining_inserts, 2, .02, random_order);
     std::cout << "Posting new version " << std::endl;

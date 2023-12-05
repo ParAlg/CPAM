@@ -71,23 +71,17 @@ void ANN(parlay::sequence<Tvec_point<T>*>& v, int maxDeg, int beamSize,
       });
       I.query(queries, k, Q);
       std::cout << "Finished query batch" << std::endl;
-      // std::this_thread::sleep_for(std::chrono::milliseconds(4000));
     }
   };
 
-  auto empty = [&]() {};
+  size_t p = parlay::num_workers();
 
-//  updater();
-//
-//  std::cout << "Finished updates" << std::endl;
-//
-//  queries();
 
-  parlay::par_do(updater, queries);
-
-  // parlay::par_do(updater, empty);
-
-  // parlay::par_do(queries, empty);
+  parlay::par_do([&] {
+    parlay::execute_with_scheduler(p/10, queries);}, 
+    [&] {parlay::execute_with_scheduler((9*p)/10, updater);
+  }); 
+  
 }
 
 template <typename T>
