@@ -1,0 +1,5 @@
+add_subdirectory(basic_examples)
+add_subdirectory(microbenchmarks)
+add_subdirectory(graphs)
+add_subdirectory(interval)
+add_subdirectory(range_query)

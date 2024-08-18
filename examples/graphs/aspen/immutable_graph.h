@@ -424,7 +424,7 @@ struct symmetric_graph {
   // assuming that an edge already shows up in both directions
   // Let the caller delete edges.
   template <class Edge>
-  void insert_edges_batch(size_t m, Edge* edges,
+  auto insert_edges_implementation(size_t m, Edge* edges,
                             bool sorted = false, bool remove_dups = false,
                             size_t nn = std::numeric_limits<size_t>::max(),
                             bool run_seq = false) {
@@ -473,7 +473,22 @@ struct symmetric_graph {
     });
     t.next("insert: Generate KV-pairs");
 
+    return elts;
+  }
+
+  // m : number of edges
+  // edges: pairs of edges to insert. Currently working with undirected graphs;
+  // assuming that an edge already shows up in both directions
+  // Let the caller delete edges.
+  template <class Edge>
+  void insert_edges_batch(size_t m, Edge* edges,
+                            bool sorted = false, bool remove_dups = false,
+                            size_t nn = std::numeric_limits<size_t>::max(),
+                            bool run_seq = false) {
+    auto elts = insert_edges_implementation(m, edges, sorted, remove_dups, nn, run_seq);
+
     auto replace = [&] (const auto& a, const auto& b) { return b; };
+    using value_type = parlay::slice<ngh_and_weight*, ngh_and_weight*>;
     auto combine_op = [&] (edge_tree cur, value_type incoming) {
       return edge_tree::multi_insert_sorted(std::move(cur), incoming, replace);
     };
@@ -486,6 +501,35 @@ struct symmetric_graph {
     };
     V = vertex_tree::multi_insert_sorted_map(std::move(V), elts, combine_op, map_op);
   }
+
+  // m : number of edges
+  // edges: pairs of edges to insert. Currently working with undirected graphs;
+  // assuming that an edge already shows up in both directions
+  // Let the caller delete edges.
+  template <class Edge>
+  SymGraph insert_edges_batch_2(size_t m, Edge* edges,
+                            bool sorted = false, bool remove_dups = false,
+                            size_t nn = std::numeric_limits<size_t>::max(),
+                            bool run_seq = false) {
+    auto elts = insert_edges_implementation(m, edges, sorted, remove_dups, nn, run_seq);
+
+    auto replace = [&] (const auto& a, const auto& b) { return b; };
+    using value_type = parlay::slice<ngh_and_weight*, ngh_and_weight*>;
+    auto combine_op = [&] (edge_tree cur, value_type incoming) {
+      return edge_tree::multi_insert_sorted(std::move(cur), incoming, replace);
+    };
+    auto map_op = [] (value_type incoming) {
+      auto tree = edge_tree(incoming.begin(), incoming.begin() + incoming.size());
+      auto root = tree.root;
+      tree.root = nullptr;
+      assert(edge_tree::Tree::ref_cnt(root) == 1);
+      return root;
+    };
+
+    auto new_V = vertex_tree::multi_insert_sorted_map(V, elts, combine_op, map_op);
+    return SymGraph(std::move(new_V));
+  }
+
 
   // m : number of edges
   // edges: pairs of edges to insert. Currently working with undirected graphs;

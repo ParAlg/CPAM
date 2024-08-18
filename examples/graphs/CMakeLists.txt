@@ -6,3 +6,4 @@ target_include_directories(aspen INTERFACE
 
 add_subdirectory(algorithms)
 add_subdirectory(run_batch_updates)
+add_subdirectory(run_simultaneous_updates_queries)
