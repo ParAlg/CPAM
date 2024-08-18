@@ -2,6 +2,8 @@
 #include <optional>
 #include <string.h>
 
+#include "parlay/primitives.h"
+
 // *******************************************
 //   Utils
 // *******************************************

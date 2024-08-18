@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "parlay/internal/binary_search.h"
+#include "parlay/primitives.h"
 
 // *******************************************
 //   Utils
