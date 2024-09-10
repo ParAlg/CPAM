@@ -137,8 +137,6 @@ struct vertexSubsetData<empty> {
   using S = uintE;
   using D = bool;
 
-
-
   // Move constructor
   vertexSubsetData<empty>(vertexSubsetData<empty>&& other) noexcept {
     n = other.n;

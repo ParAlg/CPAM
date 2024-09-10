@@ -120,8 +120,8 @@ inline std::tuple<size_t, size_t, uintT*, uintE*> parse_unweighted_symmetric_gra
   uint64_t n = parlay::internal::chars_to_int_t<unsigned long>(tokens[1]);
   uint64_t m = parlay::internal::chars_to_int_t<unsigned long>(tokens[2]);
 
-  uintT* offsets = cpam::new_array_no_init<uintT>(n+1);
-  uintE* edges = cpam::new_array_no_init<uintE>(m);
+  uintT* offsets = cpam::utils::new_array_no_init<uintT>(n+1);
+  uintE* edges = cpam::utils::new_array_no_init<uintE>(m);
 
   parlay::parallel_for(0, n, [&] (size_t i)
                   { offsets[i] = parlay::internal::chars_to_int_t<unsigned long>(tokens[i + 3]); });
