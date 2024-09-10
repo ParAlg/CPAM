@@ -10,40 +10,6 @@
 
 namespace aspen {
 
-template <class E>
-E* new_array_no_init(size_t n) {
-#ifndef PARLAY_USE_STD_ALLOC
-  auto allocator = parlay::allocator<E>();
-#else
-  auto allocator = std::allocator<E>();
-#endif
-  return allocator.allocate(n);
-}
-
-// Initializes in parallel
-template <typename E>
-E* new_array(size_t n) {
-  E* r = new_array_no_init<E>(n);
-  if (!std::is_trivially_default_constructible<E>::value) {
-    if (n > 2048) {
-      auto f = [&](size_t i) { new ((void*)(r + i)) E; };
-      parlay::parallel_for(0, n, f);
-    } else
-      for (size_t i = 0; i < n; i++) new ((void*)(r + i)) E;
-  }
-  return r;
-}
-
-template <class E>
-void free_array(E* e, size_t n) {
-#ifndef PARLAY_USE_STD_ALLOC
-  auto allocator = parlay::allocator<E>();
-#else
-  auto allocator = std::allocator<E>();
-#endif
-  allocator.deallocate(e, n);
-}
-
 template <class _data>
 struct vertexSubsetData {
   using Data = _data;
