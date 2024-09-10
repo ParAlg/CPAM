@@ -313,7 +313,7 @@ struct vertexSubsetData<empty> {
   // Converts to dense but keeps sparse representation if it exists.
   void toDense() {
     if (d_seq.size() == 0) {
-      timer t; t.start();
+      cpam::timer t; t.start();
       d_seq = parlay::sequence<bool>::uninitialized(n);
       d = d_seq.begin();
       parlay::parallel_for(0, n, [&](size_t i) { d[i] = 0; });

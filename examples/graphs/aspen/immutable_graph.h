@@ -4,6 +4,8 @@
 
 namespace aspen {
 
+using timer = cpam::timer;
+
 template <class weight>
 struct symmetric_graph {
   struct edge_entry {
