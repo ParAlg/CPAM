@@ -10,6 +10,8 @@
 
 namespace aspen {
 
+using timer = cpam::timer;
+
 inline auto symmetric_graph_from_static_graph(
     std::tuple<size_t, size_t, uintT*, uintE*>& parsed_graph) {
   using W = empty;
