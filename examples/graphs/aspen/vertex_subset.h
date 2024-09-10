@@ -16,6 +16,33 @@ struct vertexSubsetData {
   using S = std::tuple<uintE, Data>;
   using D = std::tuple<bool, Data>;
 
+  // Move constructor
+  vertexSubsetData(vertexSubsetData&& other) noexcept {
+    n = other.n;
+    m = other.m;
+    s_seq = std::move(other.s_seq);
+    s = s_seq.begin();
+    d_seq = std::move(other.d_seq);
+    d = d_seq.begin();
+    isDense = other.isDense;
+    sum_out_degrees = other.sum_out_degrees;
+  }
+
+  // Move assignment
+  vertexSubsetData& operator=(vertexSubsetData&& other) noexcept {
+    if (this != &other) {
+      n = other.n;
+      m = other.m;
+      s_seq = std::move(other.s_seq);
+      s = s_seq.begin();
+      d_seq = std::move(other.d_seq);
+      d = d_seq.begin();
+      isDense = other.isDense;
+      sum_out_degrees = other.sum_out_degrees;
+    }
+    return *this;
+  }
+
   // An empty vertex set.
   vertexSubsetData(size_t _n) : n(_n), m(0), isDense(0), sum_out_degrees(std::numeric_limits<size_t>::max()) {}
 
@@ -138,7 +165,8 @@ struct vertexSubsetData<empty> {
   using D = bool;
 
   // Move constructor
-  vertexSubsetData<empty>(vertexSubsetData<empty>&& other) noexcept {
+  vertexSubsetData(vertexSubsetData&& other) noexcept {
+    std::cout << "Our move empty!" << std::endl;
     n = other.n;
     m = other.m;
     s_seq = std::move(other.s_seq);
@@ -150,7 +178,7 @@ struct vertexSubsetData<empty> {
   }
 
   // Move assignment
-  vertexSubsetData<empty>& operator=(vertexSubsetData<empty>&& other) noexcept {
+  vertexSubsetData& operator=(vertexSubsetData&& other) noexcept {
     if (this != &other) {
       n = other.n;
       m = other.m;
@@ -164,16 +192,15 @@ struct vertexSubsetData<empty> {
     return *this;
   }
 
-
-  vertexSubsetData<empty>() : n(0), m(0), isDense(0),
+  vertexSubsetData() : n(0), m(0), isDense(0),
       sum_out_degrees(std::numeric_limits<size_t>::max()) {}
 
   // An empty vertex set.
-  vertexSubsetData<empty>(size_t _n)
+  vertexSubsetData(size_t _n)
       : n(_n), m(0), isDense(0), sum_out_degrees(std::numeric_limits<size_t>::max()) {}
 
   // A vertexSubset with a single vertex.
-  vertexSubsetData<empty>(size_t _n, uintE v)
+  vertexSubsetData(size_t _n, uintE v)
       : n(_n), m(1), isDense(0), sum_out_degrees(std::numeric_limits<size_t>::max()) {
     s_seq = parlay::sequence<uintE>(1);
     s = s_seq.begin();
@@ -181,20 +208,20 @@ struct vertexSubsetData<empty> {
   }
 
   // A vertexSubset from array of vertex indices.
-  vertexSubsetData<empty>(size_t _n, parlay::sequence<S>&& indices)
+  vertexSubsetData(size_t _n, parlay::sequence<S>&& indices)
       : n(_n), m(indices.size()), s_seq(std::move(indices)), isDense(0), sum_out_degrees(std::numeric_limits<size_t>::max()) {
     s = s_seq.begin();
   }
 
   // A vertexSubset from boolean array giving number of true values.
-  vertexSubsetData<empty>(size_t _n, size_t _m, parlay::sequence<bool>&& _d)
+  vertexSubsetData(size_t _n, size_t _m, parlay::sequence<bool>&& _d)
       : n(_n), m(_m), d_seq(std::move(_d)), isDense(1), sum_out_degrees(std::numeric_limits<size_t>::max()) {
     d = d_seq.begin();
   }
 
   // A vertexSubset from boolean array giving number of true values. Calculate
   // number of nonzeros and store in m.
-  vertexSubsetData<empty>(size_t _n, parlay::sequence<bool>&& _d)
+  vertexSubsetData(size_t _n, parlay::sequence<bool>&& _d)
       : n(_n), d_seq(std::move(_d)), isDense(1), sum_out_degrees(std::numeric_limits<size_t>::max()) {
     d = d_seq.begin();
     auto d_map = parlay::delayed_seq<size_t>(n, [&](size_t i) { return d[i]; });
