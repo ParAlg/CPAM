@@ -127,6 +127,18 @@ namespace utils {
     while (!atomic_compare_and_swap(a, oldV, newV));
   }
 
+  template <typename ET>
+  inline ET atomic_load(ET* a) {
+    ET tmp;
+    __atomic_load(a, &tmp, __ATOMIC_RELAXED);
+    return tmp;
+  }
+
+  template <typename ET>
+  inline void atomic_store(ET* a, ET b) {
+    __atomic_store(a, &b, __ATOMIC_RELAXED);
+  }
+
   template <typename F, typename AT>
   static size_t PAM_linear_search(AT* A, size_t size, const F& less) {
     for (size_t i = 0; i < size; i++)
