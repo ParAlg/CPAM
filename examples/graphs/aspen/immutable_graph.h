@@ -166,6 +166,18 @@ struct symmetric_graph {
       tree.foreach_cond(tree, map_f);
       tree.root = nullptr;
     }
+
+    template <class F>
+    void foreach_seq(F& f) {
+      auto map_f = [&](const auto& et) {
+        f(id, std::get<0>(et), std::get<1>(et));
+      };
+      edge_tree tree;
+      tree.root = edges;
+      tree.foreach_seq(tree, map_f);
+      tree.root = nullptr;
+    }
+
   };
 
   struct vertex {
