@@ -129,6 +129,21 @@ struct symmetric_graph {
       return ct;
     }
 
+    // Count the number of neighbors satisfying the predicate p.
+    template <class M, class R>
+    typename R::T map_reduce(M& m, R& r) {
+      using T = typename R::T;
+      edge_tree tree;
+      tree.root = edges;
+      auto map_f = [&](const auto& et) -> T {
+        auto [ngh, wgh] = et;
+        return m(id, ngh, wgh);
+      };
+      auto ret = edge_tree::map_reduce(tree, map_f, r);
+      tree.root = nullptr;
+      return ret;
+    }
+
     template <class F, class C>
     void map_cond(F& f, C& c) {
       auto map_f = [&](const auto& et, size_t i) {
