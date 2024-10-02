@@ -5,12 +5,12 @@ import argparse
 import settings
 
 parser = argparse.ArgumentParser(description='Run microbenchmarks')
-parser.add_argument('--small', action="store_false", help='use small-size inputs')
+parser.add_argument('--small', action="store_true", help='use small-size inputs')
 
 args = parser.parse_args()
 use_large = True
 tests = settings.large_tests
-if (args.small != None):
+if args.small:
   use_large = False
   tests = settings.small_tests
 

@@ -6,13 +6,13 @@ import settings
 # Run tests based on settings and generate raw_output files.
 
 parser = argparse.ArgumentParser(description='Run microbenchmarks')
-parser.add_argument('--small', action="store_false", help='use small-size inputs')
+parser.add_argument('--small', action="store_true", help='use small-size inputs')
 
 args = parser.parse_args()
 use_large = True
 unaug_tests = settings.large_unaug_tests
 aug_tests = settings.large_aug_tests
-if (args.small != None):
+if args.small:
   use_large = False
   unaug_tests = settings.small_unaug_tests
   aug_tests = settings.small_aug_tests
