@@ -587,6 +587,7 @@ struct map_ops : Seq {
           parlay::assign_uninitialized(merged[out_off++], et);
         } else if (Entry::comp(key, Entry::get_key(et))) {
           parlay::assign_uninitialized(merged[out_off++], e);
+          parlay::assign_uninitialized(merged[out_off++], et);
           placed = true;
         } else {  // get_key(et) == key
           parlay::assign_uninitialized(merged[out_off], et);
