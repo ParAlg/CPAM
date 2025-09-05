@@ -193,7 +193,7 @@ public:
     assert(s <= 2*B);
 
     size_t encoded_size = EntryEncoder::encoded_size(e, s);
-    size_t node_size = 3*sizeof(node_size_t) + encoded_size;
+    size_t node_size = sizeof(compressed_node) + encoded_size;
     compressed_node* c_node = (compressed_node*)utils::new_array_no_init<uint8_t>(node_size);
     //compressed_node* c_node = (compressed_node*)complex_allocator::alloc();
 
@@ -201,7 +201,7 @@ public:
     c_node->s = s;
     c_node->size_in_bytes = node_size;
 
-    uint8_t* encoded_data = (((uint8_t*)c_node) + 3*sizeof(node_size_t));
+    uint8_t* encoded_data = (((uint8_t*)c_node) + sizeof(compressed_node));
     EntryEncoder::encode(e, s, encoded_data);
 
     check_compressed_node(c_node);

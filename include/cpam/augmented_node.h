@@ -160,13 +160,13 @@ struct aug_node : public basic_node<balance,
   template<typename F>
   static void iterate_seq(node* a, const F& f) {
     if (!a) return;
-    if (basic::is_regular(a)) {
-      auto r = basic::cast_to_regular(a);
+    if (is_regular(a)) {
+      auto r = cast_to_regular(a);
       iterate_seq(r->lc, f);
       f(get_entry(r));
       iterate_seq(r->rc, f);
     } else {
-      auto c = basic::cast_to_compressed(a);
+      auto c = cast_to_compressed(a);
       uint8_t* data_start = (((uint8_t*)c) + sizeof(aug_compressed_node));
       AugEntryEncoder::decode(data_start, c->s, f);
     }
